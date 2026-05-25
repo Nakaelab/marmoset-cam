@@ -15,12 +15,12 @@ let cameraMode = 'orbit';
 // Calibrated POV offsets
 const defaults = {
   eyeTarget: 'center',
-  fov: 75,
-  offsetX: 0.00,
-  offsetY: 0.01,
+  fov: 120,
+  offsetX: -0.005,
+  offsetY: -0.005,
   offsetZ: 0.035,
-  pitch: -5,
-  yaw: 180,
+  pitch: -32,
+  yaw: 0,
   roll: 0,
   speed: 1.0,
   lighting: 'studio'
@@ -238,13 +238,16 @@ function loadModel() {
             mat.roughness = Math.max(mat.roughness, 0.2);
             mat.metalness = Math.min(mat.metalness, 0.95);
 
-            // Make PaletteMaterial001 and PaletteMaterial002 semi-transparent
+            // Make PaletteMaterial001 and PaletteMaterial002 clear acrylic glass
             if (mat.name === 'PaletteMaterial001' || mat.name === 'PaletteMaterial002') {
               mat.transparent = true;
-              mat.opacity = 0.3;
+              mat.opacity = 0.15;
               mat.depthWrite = false;
               mat.side = THREE.DoubleSide;
-              console.log(`Transparency applied to: ${mat.name}`);
+              mat.color.set(0xd5dcc8);  // Subtle green-grey tint like real acrylic
+              mat.roughness = 0.05;
+              mat.metalness = 0.0;
+              console.log(`Clear acrylic applied to: ${mat.name}`);
             }
           });
         }
@@ -366,7 +369,7 @@ function setupUIEventListeners() {
     btnOrbit.classList.add('active');
     btnPOV.classList.remove('active');
     povSettingsSec.classList.add('disabled-opacity');
-    currentModeBadge.innerText = '俯瞰モード (Orbit)';
+    currentModeBadge.innerText = '自由視点モード (Orbit)';
     helpText.innerText = '💡 マウスの左ドラッグで回転、右ドラッグで平行移動、ホイールでズームが可能です。';
     
     // Reset camera to standard orbit position
@@ -614,7 +617,7 @@ function updateEyeHelperTransform() {
   const posL = new THREE.Vector3();
   const posR = new THREE.Vector3();
   const eyeMidpoint = new THREE.Vector3();
-  const eyeRot = new THREE.Quaternion();
+  const worldQuat = new THREE.Quaternion();
 
   if (eyeL && eyeR) {
     // Obtain absolute world positions of Left & Right Eye bones
@@ -631,43 +634,37 @@ function updateEyeHelperTransform() {
     // Track rotation using the head bone rotation
     if (headBone) {
       headBone.updateMatrixWorld(true);
-      headBone.getWorldQuaternion(eyeRot);
+      headBone.getWorldQuaternion(worldQuat);
     } else {
-      eyeL.getWorldQuaternion(eyeRot);
+      eyeL.getWorldQuaternion(worldQuat);
     }
-
-    eyeHelper.quaternion.copy(eyeRot);
-    
-    // Rotate cone because default Three.js Cone geometry points along +Y.
-    // We want the apex to point in the direction of the gaze (which includes local Yaw/Pitch/Roll offsets).
-    const coneRotationOffset = new THREE.Quaternion().setFromEuler(
-      new THREE.Euler(
-        THREE.MathUtils.degToRad(povSettings.pitch - 90), // -90 deg pitch to reorient Cone's default top
-        THREE.MathUtils.degToRad(povSettings.yaw),
-        THREE.MathUtils.degToRad(povSettings.roll),
-        'YXZ'
-      )
-    );
-    eyeHelper.quaternion.multiply(coneRotationOffset);
   } else if (headBone) {
     // Fallback to Head bone position if eyes are not loaded yet
     headBone.updateMatrixWorld(true);
     headBone.getWorldPosition(eyeMidpoint);
-    headBone.getWorldQuaternion(eyeRot);
+    headBone.getWorldQuaternion(worldQuat);
 
     eyeHelper.position.copy(eyeMidpoint);
-    eyeHelper.quaternion.copy(eyeRot);
-
-    const coneRotationOffset = new THREE.Quaternion().setFromEuler(
-      new THREE.Euler(
-        THREE.MathUtils.degToRad(povSettings.pitch - 90),
-        THREE.MathUtils.degToRad(povSettings.yaw),
-        THREE.MathUtils.degToRad(povSettings.roll),
-        'YXZ'
-      )
-    );
-    eyeHelper.quaternion.multiply(coneRotationOffset);
+  } else {
+    return;
   }
+
+  // Calculate POV camera orientation (gaze direction)
+  const alignmentQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+  const calibrationQuat = new THREE.Quaternion().setFromEuler(
+    new THREE.Euler(
+      THREE.MathUtils.degToRad(povSettings.pitch),
+      THREE.MathUtils.degToRad(povSettings.yaw),
+      THREE.MathUtils.degToRad(povSettings.roll),
+      'YXZ'
+    )
+  );
+
+  const gazeQuat = worldQuat.clone().multiply(alignmentQuat).multiply(calibrationQuat);
+  
+  // Helper geometry points along +Y, so rotate +90 degrees around X to align with camera -Z look direction
+  const geomAdj = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+  eyeHelper.quaternion.copy(gazeQuat).multiply(geomAdj);
 }
 
 // --- Dynamic Bone Tracking & Camera Attachment (POV Mode) ---
@@ -712,19 +709,8 @@ function trackMarmosetPOV() {
     }
   }
 
-  // 2. Apply Position Offsets (rotated along the bone's orientation)
-  const posOffset = new THREE.Vector3(
-    povSettings.offsetX,
-    povSettings.offsetY,
-    povSettings.offsetZ
-  );
-  posOffset.applyQuaternion(worldQuat);
-  worldPos.add(posOffset);
-
-  // Position the camera
-  camera.position.copy(worldPos);
-
-  // 3. Apply Rotation Offsets (Pitch, Yaw, Roll)
+  // 2. Compute final camera orientation (aligned to look along local Y of Head/Eye)
+  const alignmentQuat = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
   const calibrationQuat = new THREE.Quaternion().setFromEuler(
     new THREE.Euler(
       THREE.MathUtils.degToRad(povSettings.pitch),
@@ -734,8 +720,22 @@ function trackMarmosetPOV() {
     )
   );
 
-  worldQuat.multiply(calibrationQuat);
-  camera.quaternion.copy(worldQuat);
+  const gazeQuat = worldQuat.clone().multiply(alignmentQuat).multiply(calibrationQuat);
+  camera.quaternion.copy(gazeQuat);
+
+  // 3. Apply Position Offsets relative to the camera's view orientation:
+  // - X offset is Right/Left
+  // - Y offset is Up/Down
+  // - Z offset is Forward/Backward (moving along camera -Z axis)
+  const localOffset = new THREE.Vector3(
+    povSettings.offsetX,
+    povSettings.offsetY,
+    -povSettings.offsetZ
+  );
+  localOffset.applyQuaternion(camera.quaternion);
+  
+  // Position the camera
+  camera.position.copy(worldPos).add(localOffset);
 }
 
 // Initialize!
