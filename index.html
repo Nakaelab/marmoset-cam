@@ -13,14 +13,14 @@
   
   <link rel="stylesheet" href="./index.css">
 
-  <!-- Import map to allow bare imports to resolve locally from node_modules -->
+  <!-- Import map to allow bare imports to resolve from CDN on GitHub Pages -->
   <script type="importmap">
     {
       "imports": {
-        "three": "./node_modules/three/build/three.module.js",
-        "three/examples/jsm/controls/OrbitControls.js": "./node_modules/three/examples/jsm/controls/OrbitControls.js",
-        "three/examples/jsm/loaders/GLTFLoader.js": "./node_modules/three/examples/jsm/loaders/GLTFLoader.js",
-        "three/examples/jsm/loaders/DRACOLoader.js": "./node_modules/three/examples/jsm/loaders/DRACOLoader.js"
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/examples/jsm/controls/OrbitControls.js": "https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js",
+        "three/examples/jsm/loaders/GLTFLoader.js": "https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js",
+        "three/examples/jsm/loaders/DRACOLoader.js": "https://unpkg.com/three@0.160.0/examples/jsm/loaders/DRACOLoader.js"
       }
     }
   </script>
