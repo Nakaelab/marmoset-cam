@@ -307,7 +307,7 @@ function loadModel() {
 
       // Update loading status
       if (statusEl) {
-        statusEl.innerText = 'モデル読込完了';
+        statusEl.innerText = 'Model Loaded';
         statusEl.style.color = '#10b981'; // Green
         setTimeout(() => {
           statusEl.style.opacity = '0';
@@ -319,13 +319,13 @@ function loadModel() {
     (xhr) => {
       const pct = (xhr.loaded / xhr.total) * 100;
       if (statusEl) {
-        statusEl.innerText = `モデル読込中... (${pct.toFixed(0)}%)`;
+        statusEl.innerText = `Loading Model... (${pct.toFixed(0)}%)`;
       }
       console.log(`Loading model: ${pct.toFixed(1)}%`);
     },
     (error) => {
       if (statusEl) {
-        statusEl.innerText = '読込失敗: ' + error.message;
+        statusEl.innerText = 'Loading Failed: ' + error.message;
         statusEl.style.color = '#ef4444'; // Red
       }
       console.error('Error loading model:', error);
@@ -369,8 +369,8 @@ function setupUIEventListeners() {
     btnOrbit.classList.add('active');
     btnPOV.classList.remove('active');
     povSettingsSec.classList.add('disabled-opacity');
-    currentModeBadge.innerText = '自由視点モード (Orbit)';
-    helpText.innerText = '💡 マウスの左ドラッグで回転、右ドラッグで平行移動、ホイールでズームが可能です。';
+    currentModeBadge.innerText = 'Orbit Mode';
+    helpText.innerText = '💡 Drag with left mouse button to rotate, right button to pan, and scroll wheel to zoom.';
     
     // Reset camera to standard orbit position
     controls.enabled = true;
@@ -387,8 +387,8 @@ function setupUIEventListeners() {
     btnPOV.classList.add('active');
     btnOrbit.classList.remove('active');
     povSettingsSec.classList.remove('disabled-opacity');
-    currentModeBadge.innerText = 'マーモセット目線 (POV)';
-    helpText.innerText = '💡 マーモセットの一人称目線です。スライダーをドラッグしてカメラの位置や視野角を調整できます。';
+    currentModeBadge.innerText = 'POV Mode';
+    helpText.innerText = '💡 Marmoset first-person POV. Drag sliders to adjust camera offset, angles, and FOV.';
     
     // Disable Orbit Controls in POV mode
     controls.enabled = false;
@@ -430,12 +430,12 @@ function setupUIEventListeners() {
     if (!activeAction) return;
     if (activeAction.paused) {
       activeAction.paused = false;
-      btnPlayPause.innerText = '一時停止';
+      btnPlayPause.innerText = 'Pause';
       btnPlayPause.classList.remove('btn-secondary');
       btnPlayPause.classList.add('btn-primary');
     } else {
       activeAction.paused = true;
-      btnPlayPause.innerText = '再生';
+      btnPlayPause.innerText = 'Play';
       btnPlayPause.classList.remove('btn-primary');
       btnPlayPause.classList.add('btn-secondary');
     }
