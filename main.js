@@ -238,16 +238,20 @@ function loadModel() {
             mat.roughness = Math.max(mat.roughness, 0.2);
             mat.metalness = Math.min(mat.metalness, 0.95);
 
-            // Make PaletteMaterial001 and PaletteMaterial002 clear acrylic glass
-            if (mat.name === 'PaletteMaterial001' || mat.name === 'PaletteMaterial002') {
+            // Make PaletteMaterial001, PaletteMaterial002, and PaletteMaterial004 clear white acrylic glass
+            if (mat.name === 'PaletteMaterial001' || mat.name === 'PaletteMaterial002' || mat.name === 'PaletteMaterial004') {
               mat.transparent = true;
-              mat.opacity = 0.15;
+              mat.opacity = 0.2;  // Beautiful semi-transparent white
               mat.depthWrite = false;
               mat.side = THREE.DoubleSide;
-              mat.color.set(0xd5dcc8);  // Subtle green-grey tint like real acrylic
-              mat.roughness = 0.05;
-              mat.metalness = 0.0;
-              console.log(`Clear acrylic applied to: ${mat.name}`);
+              mat.map = null;     // Clear the palette texture so it becomes pure white
+              mat.roughnessMap = null;
+              mat.metalnessMap = null;
+              mat.color.set(0xffffff); // Pure white
+              mat.roughness = 0.1;
+              mat.metalness = 0.1;
+              mat.needsUpdate = true;
+              console.log(`White acrylic applied to: ${mat.name}`);
             }
           });
         }
