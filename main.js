@@ -59,11 +59,11 @@ function init() {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.0;
+  renderer.toneMappingExposure = 1.2;
 
   // Scene
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xffffff);
+  scene.background = new THREE.Color(0xa5a89c);
   scene.fog = null;
 
   // Main Camera
@@ -86,6 +86,9 @@ function init() {
   // Setup Lights
   setupLights();
   setLightingPreset(defaults.lighting);
+
+  // Setup Environment map for reflections
+  setupEnvironment();
 
   // Load Model
   loadModel();
@@ -150,6 +153,36 @@ function setupLights() {
   scene.add(lights.spot);
 }
 
+// --- Setup Environment map for reflections ---
+function setupEnvironment() {
+  const pmremGenerator = new THREE.PMREMGenerator(renderer);
+  pmremGenerator.compileEquirectangularShader();
+
+  const envScene = new THREE.Scene();
+  
+  // Ambient light in environment
+  const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
+  envScene.add(ambientLight);
+
+  // Bright light from top-front-right
+  const dirLight1 = new THREE.DirectionalLight(0xffffff, 4.0);
+  dirLight1.position.set(2, 5, 3);
+  envScene.add(dirLight1);
+
+  // Soft light from opposite side
+  const dirLight2 = new THREE.DirectionalLight(0xffffff, 2.0);
+  dirLight2.position.set(-2, 3, -3);
+  envScene.add(dirLight2);
+
+  // Light grey sky background for high-quality ambient reflection
+  envScene.background = new THREE.Color(0xeeeeee);
+
+  const envMap = pmremGenerator.fromScene(envScene).texture;
+  scene.environment = envMap;
+  
+  pmremGenerator.dispose();
+}
+
 // --- Set Lighting Presets ---
 function setLightingPreset(preset) {
   // Reset all intensities
@@ -164,8 +197,8 @@ function setLightingPreset(preset) {
 
   switch (preset) {
     case 'studio':
-      scene.background.setHex(0xffffff);
-      if (scene.fog) scene.fog.color.setHex(0xffffff);
+      scene.background.setHex(0xa5a89c);
+      if (scene.fog) scene.fog.color.setHex(0xa5a89c);
       
       lights.hemi.color.setHex(0xffffff);
       lights.hemi.groundColor.setHex(0x2d3748);
@@ -262,50 +295,70 @@ function loadModel() {
           const mats = Array.isArray(child.material) ? child.material : [child.material];
           mats.forEach((mat) => {
             if (!mat) return;
-            mat.roughness = Math.max(mat.roughness, 0.2);
-            mat.metalness = Math.min(mat.metalness, 0.95);
 
-            // Make PaletteMaterial001 and PaletteMaterial002 clear acrylic glass (reverted to previous state)
-            if (mat.name === 'PaletteMaterial001' || mat.name === 'PaletteMaterial002') {
+            // Align materials with the 3D Experimental Environment color and transparency exactly
+            if (mat.name === 'PaletteMaterial001') {
+              // Outer walls/room (opaque dark grey/black)
+              mat.transparent = false;
+              mat.opacity = 1.0;
+              mat.depthWrite = true;
+              mat.side = THREE.DoubleSide;
+              mat.needsUpdate = true;
+              console.log(`Opaque outer room applied to: ${mat.name}`);
+            }
+            else if (mat.name === 'PaletteMaterial002') {
+              // Trays/internal shelves (transparent white/light grey)
               mat.transparent = true;
-              mat.opacity = 0.15;
+              mat.opacity = 0.2;
               mat.depthWrite = false;
               mat.side = THREE.DoubleSide;
-              mat.color.set(0xd5dcc8);  // Subtle green-grey tint like real acrylic
-              mat.roughness = 0.05;
-              mat.metalness = 0.0;
-              console.log(`Clear acrylic applied to: ${mat.name}`);
+              mat.needsUpdate = true;
+              console.log(`Transparent tray/shelf applied to: ${mat.name}`);
             }
-
-            // Make PaletteMaterial003 clean refractive glass (clear glass)
-            if (mat.name === 'PaletteMaterial003') {
-              mat.map = null; // Ignore the palette texture
-              mat.color.set(0xffffff); // Clear white/glass
-              mat.roughness = 0.1;
+            else if (mat.name === 'PaletteMaterial003') {
+              // Inner cage side sheets (transparent refractive glass)
+              mat.transparent = true;
+              mat.opacity = 0.99;
+              mat.depthWrite = false;
+              mat.side = THREE.DoubleSide;
+              if (mat.transmission !== undefined) {
+                mat.transmission = 1.0;
+                mat.ior = 1.4;
+              }
               mat.needsUpdate = true;
               console.log(`Clean glass applied to: ${mat.name}`);
             }
- 
-            // Make PaletteMaterial004, PaletteMaterial005, PaletteMaterial006, and PaletteMaterial007 solid opaque metallic silver
-            if (
-              mat.name === 'PaletteMaterial004' ||
+            else if (mat.name === 'PaletteMaterial004') {
+              // Green wall/panel (transparent green)
+              mat.transparent = true;
+              mat.opacity = 0.8;
+              mat.depthWrite = false;
+              mat.side = THREE.DoubleSide;
+              mat.needsUpdate = true;
+              console.log(`Thin green panel applied to: ${mat.name}`);
+            }
+            else if (
               mat.name === 'PaletteMaterial005' ||
               mat.name === 'PaletteMaterial006' ||
               mat.name === 'PaletteMaterial007'
             ) {
-              mat.map = null; // Ignore the palette texture
-              mat.roughnessMap = null;
-              mat.metalnessMap = null;
-              mat.color.set(0xcccccc); // Light silver/gray
-              mat.transparent = false; // Solid opaque
+              // Cage pillars, frames, grids/wires, and light bar (opaque, metallic silver/grey)
+              mat.transparent = false;
               mat.opacity = 1.0;
               mat.depthWrite = true;
               mat.side = THREE.DoubleSide;
+              
+              // Enable original metallic reflection
               mat.roughness = 0.2;
-              mat.metalness = 0.8; // Metallic look
-              if (mat.transmission) mat.transmission = 0; // Disable transmission if any
+              mat.metalness = 0.95;
+
+              // Add white emissive light to the LED light bar
+              if (mat.name === 'PaletteMaterial007') {
+                mat.emissive.setHex(0xffffff);
+                mat.emissiveIntensity = 2.5;
+              }
               mat.needsUpdate = true;
-              console.log(`Opaque silver metal applied to: ${mat.name}`);
+              console.log(`Opaque structure metal applied to: ${mat.name}`);
             }
           });
         }
