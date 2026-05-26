@@ -30,6 +30,9 @@ let povSettings = { ...defaults };
 let isUserDraggingTimeline = false;
 let clock = new THREE.Clock();
 
+// Embed mode detection
+const isEmbedMode = new URLSearchParams(window.location.search).has('embed');
+
 // Lighting elements holder
 const lights = {
   ambient: null,
@@ -85,6 +88,12 @@ function init() {
   // Setup Event Listeners
   window.addEventListener('resize', onWindowResize);
   setupUIEventListeners();
+
+  // Embed mode: hide all UI overlay
+  if (isEmbedMode) {
+    const uiOverlay = document.getElementById('ui-overlay');
+    if (uiOverlay) uiOverlay.style.display = 'none';
+  }
 
   // Start Loop
   animate();
@@ -325,6 +334,14 @@ function loadModel() {
           statusEl.style.transition = 'opacity 1s ease';
         }, 3000);
       }
+
+      // Embed mode: auto-switch to POV
+      if (isEmbedMode) {
+        cameraMode = 'pov';
+        controls.enabled = false;
+        if (eyeHelper) eyeHelper.visible = false;
+      }
+
       console.log('Model loaded successfully!');
     },
     (xhr) => {

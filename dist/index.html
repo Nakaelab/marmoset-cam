@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Marmoset POV Eye Camera - 3D Viewer</title>
+  <meta name="description" content="View the marmoset 3D model through its own eyes using real-time bone-attached camera tracking.">
+  
+  <!-- Premium Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Space+Grotesk:wght@400;600&display=swap" rel="stylesheet">
+  
+
+  <!-- Import map to allow bare imports to resolve from CDN on GitHub Pages -->
+
+
+  <!-- Diagnostic error listener script -->
+  <script>
+    window.addEventListener('error', function(e) {
+      showErrorBanner('Error: ' + e.message + ' at ' + e.filename + ':' + e.lineno);
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      showErrorBanner('Promise Rejection: ' + e.reason);
+    });
+    function showErrorBanner(message) {
+      let banner = document.getElementById('error-banner');
+      if (!banner) {
+        banner = document.createElement('div');
+        banner.id = 'error-banner';
+        banner.style.position = 'fixed';
+        banner.style.top = '10px';
+        banner.style.left = '50%';
+        banner.style.transform = 'translateX(-50%)';
+        banner.style.background = 'rgba(239, 68, 68, 0.95)';
+        banner.style.color = 'white';
+        banner.style.padding = '12px 24px';
+        banner.style.borderRadius = '8px';
+        banner.style.zIndex = '999999';
+        banner.style.fontFamily = 'monospace';
+        banner.style.fontSize = '12px';
+        banner.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+        banner.style.maxWidth = '90%';
+        banner.style.wordBreak = 'break-all';
+        document.body.appendChild(banner);
+      }
+      banner.innerText = message;
+    }
+  </script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/examples/jsm/controls/OrbitControls.js": "https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js",
+        "three/examples/jsm/loaders/GLTFLoader.js": "https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js",
+        "three/examples/jsm/loaders/DRACOLoader.js": "https://unpkg.com/three@0.160.0/examples/jsm/loaders/DRACOLoader.js"
+      }
+    }
+  </script>
+  <script type="module" crossorigin src="/assets/index-BfJaQBLC.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-BuEQB6XI.css">
+</head>
+<body>
+  <!-- WebGL Canvas -->
+  <canvas id="webgl-canvas"></canvas>
+
+  <!-- Overlay UI -->
+  <div id="ui-overlay">
+    <!-- Header -->
+    <header class="main-header glass-card">
+      <div class="logo-area">
+        <span class="status-indicator animate-pulse"></span>
+        <div>
+          <h1>MARMOSET POV VIEW</h1>
+          <p class="subtitle">Skeletal Eye Tracking System</p>
+          <p id="load-status" style="font-size: 0.65rem; color: #f59e0b; margin-top: 4px; font-weight: 600;">Loading Model...</p>
+        </div>
+      </div>
+      <div class="active-mode-badge" id="current-mode-badge">Orbit Mode</div>
+    </header>
+
+    <!-- Controls Panel -->
+    <main class="controls-panel glass-card">
+      <!-- Section: View Mode -->
+      <section class="control-group">
+        <h2>Camera Mode</h2>
+        <div class="toggle-container">
+          <button id="btn-orbit" class="btn-toggle active">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+            <span>Orbit</span>
+          </button>
+          <button id="btn-pov" class="btn-toggle">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>
+            <span>Marmoset POV</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Section: Eye Select & POV Settings -->
+      <section id="pov-settings" class="control-group disabled-opacity">
+        <div class="section-title-with-badge">
+          <h2>POV Calibration</h2>
+          <span class="badge" id="calibration-active-badge">Active in POV Only</span>
+        </div>
+
+        <div class="control-row">
+          <label for="select-eye">Tracking Target</label>
+          <select id="select-eye" class="styled-select">
+            <option value="center" selected>Binocular Center (Center POV)</option>
+            <option value="left">Left Eye</option>
+            <option value="right">Right Eye</option>
+          </select>
+        </div>
+
+        <div class="slider-group">
+          <div class="slider-header">
+            <span>Field of View (FOV)</span>
+            <span class="value-display" id="val-fov">120°</span>
+          </div>
+          <input type="range" id="slider-fov" min="30" max="120" value="120" step="1">
+        </div>
+
+        <h3>Position Offset</h3>
+        <div class="slider-group">
+          <div class="slider-header">
+            <span>Left / Right (Offset X)</span>
+            <span class="value-display" id="val-offset-x">-0.005</span>
+          </div>
+          <input type="range" id="slider-offset-x" min="-0.1" max="0.1" value="-0.005" step="0.005">
+        </div>
+        <div class="slider-group">
+          <div class="slider-header">
+            <span>Up / Down (Offset Y)</span>
+            <span class="value-display" id="val-offset-y">-0.005</span>
+          </div>
+          <input type="range" id="slider-offset-y" min="-0.1" max="0.1" value="-0.005" step="0.005">
+        </div>
+        <div class="slider-group">
+          <div class="slider-header">
+            <span>Forward / Backward (Offset Z)</span>
+            <span class="value-display" id="val-offset-z">0.035</span>
+          </div>
+          <input type="range" id="slider-offset-z" min="-0.1" max="0.1" value="0.035" step="0.005">
+        </div>
+
+        <h3>Rotation Offset</h3>
+        <div class="slider-group">
+          <div class="slider-header">
+            <span>Pitch</span>
+            <span class="value-display" id="val-pitch">-32°</span>
+          </div>
+          <input type="range" id="slider-pitch" min="-90" max="90" value="-32" step="1">
+        </div>
+        <div class="slider-group">
+          <div class="slider-header">
+            <span>Yaw</span>
+            <span class="value-display" id="val-yaw">0°</span>
+          </div>
+          <input type="range" id="slider-yaw" min="-180" max="180" value="0" step="1">
+        </div>
+        <div class="slider-group">
+          <div class="slider-header">
+            <span>Roll</span>
+            <span class="value-display" id="val-roll">0°</span>
+          </div>
+          <input type="range" id="slider-roll" min="-90" max="90" value="0" step="1">
+        </div>
+
+        <button id="btn-reset-calibration" class="btn-secondary">
+          Reset Calibration
+        </button>
+      </section>
+
+      <!-- Section: Animation Controller -->
+      <section class="control-group">
+        <h2>Animation</h2>
+        <div class="anim-playback-controls">
+          <button id="btn-play-pause" class="btn-primary">Pause</button>
+          <div class="slider-group flex-1">
+            <div class="slider-header">
+              <span>Playback Speed</span>
+              <span class="value-display" id="val-speed">1.0x</span>
+            </div>
+            <input type="range" id="slider-speed" min="0.1" max="2.0" value="1.0" step="0.1">
+          </div>
+        </div>
+        
+        <div class="timeline-container">
+          <input type="range" id="slider-timeline" min="0" max="100" value="0" step="0.1">
+          <div class="time-readout">
+            <span id="time-current">0.0s</span>
+            <span id="time-total">0.0s</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section: Display Settings -->
+      <section class="control-group">
+        <h2>Display Settings</h2>
+        
+        <div class="checkbox-row">
+          <label class="checkbox-container">
+            <input type="checkbox" id="check-bones">
+            <span class="checkmark"></span>
+            <span>Show Skeleton Bones</span>
+          </label>
+        </div>
+
+        <div class="checkbox-row">
+          <label class="checkbox-container">
+            <input type="checkbox" id="check-eye-helper" checked>
+            <span class="checkmark"></span>
+            <span>Show Gaze Cone</span>
+          </label>
+        </div>
+
+        <div class="checkbox-row">
+          <label class="checkbox-container">
+            <input type="checkbox" id="check-grid" checked>
+            <span class="checkmark"></span>
+            <span>Show Grid Floor</span>
+          </label>
+        </div>
+
+        <div class="checkbox-row">
+          <label class="checkbox-container">
+            <input type="checkbox" id="check-hide-body" checked>
+            <span class="checkmark"></span>
+            <span>Hide Marmoset Body in POV</span>
+          </label>
+        </div>
+
+        <div class="checkbox-row">
+          <label class="checkbox-container">
+            <input type="checkbox" id="check-track-marmoset">
+            <span class="checkmark"></span>
+            <span>Track Marmoset in Orbit</span>
+          </label>
+        </div>
+
+        <div class="control-row">
+          <label for="select-lighting">Lighting Environment</label>
+          <select id="select-lighting" class="styled-select">
+            <option value="studio" selected>Studio</option>
+            <option value="sunset">Sunset</option>
+            <option value="forest">Forest</option>
+            <option value="dark">Dark Minimal</option>
+          </select>
+        </div>
+      </section>
+    </main>
+
+    <!-- Bottom Instruction Bar -->
+    <footer class="footer-help glass-card">
+      <p id="help-text">💡 Drag with left mouse button to rotate, right button to pan, and scroll wheel to zoom.</p>
+    </footer>
+  </div>
+
+</body>
+</html>
