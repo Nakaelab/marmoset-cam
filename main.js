@@ -253,7 +253,7 @@ function loadModel() {
             // Make PaletteMaterial004 transparent green acrylic sheet (green but thin/transparent)
             if (mat.name === 'PaletteMaterial004') {
               mat.transparent = true;
-              mat.opacity = 0.25;  // Thin/transparent green
+              mat.opacity = 0.45;  // Adjusted to match the screenshot's green transparency
               mat.depthWrite = false;
               mat.side = THREE.DoubleSide;
               mat.roughness = 0.1;
