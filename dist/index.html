@@ -61,6 +61,15 @@
   <link rel="stylesheet" crossorigin href="/assets/index-BuEQB6XI.css">
 </head>
 <body>
+  <!-- Embed mode: hide UI immediately before anything renders -->
+  <script>
+    if (new URLSearchParams(window.location.search).has('embed')) {
+      document.addEventListener('DOMContentLoaded', function() {
+        var ui = document.getElementById('ui-overlay');
+        if (ui) ui.style.display = 'none';
+      });
+    }
+  </script>
   <!-- WebGL Canvas -->
   <canvas id="webgl-canvas"></canvas>
 
