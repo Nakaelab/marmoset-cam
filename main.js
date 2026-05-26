@@ -277,28 +277,35 @@ function loadModel() {
               console.log(`Clear acrylic applied to: ${mat.name}`);
             }
 
-            // Make PaletteMaterial004 transparent green acrylic sheet (green but thin/transparent)
-            if (mat.name === 'PaletteMaterial004') {
-              mat.transparent = true;
-              mat.opacity = 0.45;  // Adjusted to match the screenshot's green transparency
-              mat.depthWrite = false;
-              mat.side = THREE.DoubleSide;
+            // Make PaletteMaterial003 clean refractive glass (clear glass)
+            if (mat.name === 'PaletteMaterial003') {
+              mat.map = null; // Ignore the palette texture
+              mat.color.set(0xffffff); // Clear white/glass
               mat.roughness = 0.1;
-              mat.metalness = 0.1;
-              console.log(`Transparent green applied to: ${mat.name}`);
+              mat.needsUpdate = true;
+              console.log(`Clean glass applied to: ${mat.name}`);
             }
-
-            // Make PaletteMaterial005, PaletteMaterial006, and PaletteMaterial007 (cage frame and wire mesh) light silver/gray and semi-transparent
-            if (mat.name === 'PaletteMaterial005' || mat.name === 'PaletteMaterial006' || mat.name === 'PaletteMaterial007') {
-              mat.map = null; // Ignore the dark palette texture
+ 
+            // Make PaletteMaterial004, PaletteMaterial005, PaletteMaterial006, and PaletteMaterial007 solid opaque metallic silver
+            if (
+              mat.name === 'PaletteMaterial004' ||
+              mat.name === 'PaletteMaterial005' ||
+              mat.name === 'PaletteMaterial006' ||
+              mat.name === 'PaletteMaterial007'
+            ) {
+              mat.map = null; // Ignore the palette texture
+              mat.roughnessMap = null;
+              mat.metalnessMap = null;
               mat.color.set(0xcccccc); // Light silver/gray
-              mat.transparent = true;
-              mat.opacity = 0.4;
-              mat.depthWrite = false;
+              mat.transparent = false; // Solid opaque
+              mat.opacity = 1.0;
+              mat.depthWrite = true;
               mat.side = THREE.DoubleSide;
               mat.roughness = 0.2;
               mat.metalness = 0.8; // Metallic look
-              console.log(`Cage material adjustment applied to: ${mat.name}`);
+              if (mat.transmission) mat.transmission = 0; // Disable transmission if any
+              mat.needsUpdate = true;
+              console.log(`Opaque silver metal applied to: ${mat.name}`);
             }
           });
         }
