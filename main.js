@@ -30,6 +30,11 @@ let povSettings = { ...defaults };
 let isUserDraggingTimeline = false;
 let clock = new THREE.Clock();
 
+// Variables to track animation synchronization from parent
+let lastReceivedSyncTime = null;
+let lastReceivedSyncTimestamp = null;
+let isParentPaused = false;
+
 // Embed mode detection
 const isEmbedMode = new URLSearchParams(window.location.search).has('embed');
 
@@ -88,6 +93,19 @@ function init() {
   // Setup Event Listeners
   window.addEventListener('resize', onWindowResize);
   setupUIEventListeners();
+
+  // Listen for sync messages from the parent window
+  window.addEventListener('message', (event) => {
+    const data = event.data;
+    if (data && data.type === 'sync-time') {
+      lastReceivedSyncTime = data.currentTime;
+      lastReceivedSyncTimestamp = performance.now();
+      isParentPaused = data.paused;
+      if (mixer) {
+        mixer.setTime(data.currentTime);
+      }
+    }
+  });
 
   // Embed mode: hide all UI overlay
   if (isEmbedMode) {
@@ -268,6 +286,19 @@ function loadModel() {
               mat.roughness = 0.1;
               mat.metalness = 0.1;
               console.log(`Transparent green applied to: ${mat.name}`);
+            }
+
+            // Make PaletteMaterial005, PaletteMaterial006, and PaletteMaterial007 (cage frame and wire mesh) light silver/gray and semi-transparent
+            if (mat.name === 'PaletteMaterial005' || mat.name === 'PaletteMaterial006' || mat.name === 'PaletteMaterial007') {
+              mat.map = null; // Ignore the dark palette texture
+              mat.color.set(0xcccccc); // Light silver/gray
+              mat.transparent = true;
+              mat.opacity = 0.4;
+              mat.depthWrite = false;
+              mat.side = THREE.DoubleSide;
+              mat.roughness = 0.2;
+              mat.metalness = 0.8; // Metallic look
+              console.log(`Cage material adjustment applied to: ${mat.name}`);
             }
           });
         }
@@ -592,18 +623,38 @@ function animate() {
   const delta = clock.getDelta();
 
   // 1. Update Skeletal Animation
-  if (mixer && !isUserDraggingTimeline && activeAction && !activeAction.paused) {
-    mixer.update(delta);
-    
-    // Update timeline position slider
-    const clip = activeAction.getClip();
-    const currentTime = activeAction.time;
-    const duration = clip.duration;
-    
-    document.getElementById('time-current').innerText = currentTime.toFixed(1) + 's';
-    
-    const pct = (currentTime / duration) * 100;
-    document.getElementById('slider-timeline').value = pct;
+  if (mixer && !isUserDraggingTimeline && activeAction) {
+    if (lastReceivedSyncTime !== null) {
+      let targetTime = lastReceivedSyncTime;
+      if (!isParentPaused) {
+        const elapsedSinceSync = (performance.now() - lastReceivedSyncTimestamp) / 1000;
+        targetTime += elapsedSinceSync;
+      }
+      
+      mixer.setTime(targetTime);
+      
+      // Update timeline position slider
+      const clip = activeAction.getClip();
+      const duration = clip.duration;
+      const displayTime = targetTime % duration;
+      
+      document.getElementById('time-current').innerText = displayTime.toFixed(1) + 's';
+      
+      const pct = (displayTime / duration) * 100;
+      document.getElementById('slider-timeline').value = pct;
+    } else if (!activeAction.paused) {
+      mixer.update(delta);
+      
+      // Update timeline position slider
+      const clip = activeAction.getClip();
+      const currentTime = activeAction.time;
+      const duration = clip.duration;
+      
+      document.getElementById('time-current').innerText = currentTime.toFixed(1) + 's';
+      
+      const pct = (currentTime / duration) * 100;
+      document.getElementById('slider-timeline').value = pct;
+    }
   }
 
   // 2. Perform POV Tracking or Orbit Rendering
