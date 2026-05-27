@@ -78,9 +78,10 @@ function init() {
   controls.minDistance = 0.1;
   controls.maxDistance = 20;
 
-  // Setup basic grid
+  // Setup basic grid (hidden by default to match reference environment)
   gridHelper = new THREE.GridHelper(10, 50, 0x475569, 0x1e293b);
   gridHelper.position.y = -0.5; // Will adjust based on model load bounds
+  gridHelper.visible = document.getElementById('check-grid').checked;
   scene.add(gridHelper);
 
   // Setup Lights
