@@ -995,56 +995,31 @@ function create3DMonitor(texture) {
   group.add(screenMesh);
 
   // 2. Bezel/Frame (Black plastic backing)
-  const bezelGeom = new THREE.BoxGeometry(0.34, 0.20, 0.015);
+  const bezelGeom = new THREE.BoxGeometry(0.34, 0.20, 0.012);
   const bezelMat = new THREE.MeshStandardMaterial({
-    color: 0x111827,
-    roughness: 0.6,
-    metalness: 0.1
+    color: 0x0f172a, // Dark slate gray
+    roughness: 0.2,
+    metalness: 0.8,
+    transparent: true,
+    opacity: 0.85
   });
   const bezelMesh = new THREE.Mesh(bezelGeom, bezelMat);
-  bezelMesh.position.z = -0.01;
+  bezelMesh.position.z = -0.008;
   group.add(bezelMesh);
 
-  // 3. Support Stand (Metallic pole & base)
-  const standGroup = new THREE.Group();
-  
-  const poleGeom = new THREE.CylinderGeometry(0.008, 0.008, 0.35);
-  const metalMat = new THREE.MeshStandardMaterial({
-    color: 0x4b5563,
-    roughness: 0.3,
-    metalness: 0.8
-  });
-  const pole = new THREE.Mesh(poleGeom, metalMat);
-  pole.position.y = -0.18;
-  pole.position.z = -0.01;
-  standGroup.add(pole);
-
-  const baseGeom = new THREE.CylinderGeometry(0.05, 0.05, 0.01, 16);
-  const base = new THREE.Mesh(baseGeom, metalMat);
-  base.position.y = -0.35;
-  base.position.z = -0.01;
-  standGroup.add(base);
-
-  group.add(standGroup);
-
-  // Position the monitor relative to the loaded cage model bounds
-  if (model) {
-    const box = new THREE.Box3().setFromObject(model);
-    const center = box.getCenter(new THREE.Vector3());
-
-    // Place it slightly in front and to the left of the cage
+  // Position the monitor floating directly in front of the marmoset cage
+  if (controls && controls.target) {
     group.position.set(
-      center.x - 0.45,                 // Left side of cage
-      box.min.y + 0.35,                // 35cm above the floor
-      center.z + 0.5                  // Slightly forward
+      controls.target.x,
+      controls.target.y,
+      controls.target.z + 0.55 // Directly in front of the cage at eye-level
     );
-
-    // Rotate it 35 degrees towards the center/viewer
-    group.rotation.y = Math.PI / 5;
   } else {
-    group.position.set(-0.4, 0.1, 0.5);
-    group.rotation.y = Math.PI / 5;
+    group.position.set(0, 1.15, 0.55);
   }
+
+  // Face directly forward towards the camera
+  group.rotation.y = 0;
 
   return group;
 }
