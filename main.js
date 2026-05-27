@@ -934,13 +934,16 @@ async function startWebcam() {
     }
 
     webcamStream = await navigator.mediaDevices.getUserMedia({
-      video: { width: 640, height: 360 }
+      video: { width: { ideal: 1920 }, height: { ideal: 1080 } }
     });
     webcamVideoElement.srcObject = webcamStream;
     await webcamVideoElement.play();
 
     webcamTexture = new THREE.VideoTexture(webcamVideoElement);
     webcamTexture.colorSpace = THREE.SRGBColorSpace;
+    webcamTexture.minFilter = THREE.LinearFilter;
+    webcamTexture.magFilter = THREE.LinearFilter;
+    webcamTexture.generateMipmaps = false;
 
     if (!virtualMonitorGroup) {
       virtualMonitorGroup = create3DMonitor(webcamTexture);
@@ -948,9 +951,6 @@ async function startWebcam() {
       const screenMesh = virtualMonitorGroup.getObjectByName('monitorScreen');
       if (screenMesh) {
         screenMesh.material.map = webcamTexture;
-        if (screenMesh.material.emissiveMap !== undefined) {
-          screenMesh.material.emissiveMap = webcamTexture;
-        }
         screenMesh.material.needsUpdate = true;
       }
     }
@@ -987,17 +987,14 @@ function create3DMonitor(texture) {
   const group = new THREE.Group();
   group.name = 'virtualMonitorGroup';
 
-  // 1. Screen (Display area) - Increased size to 0.48m x 0.27m
+  // 1. Screen (Display area) - Large 16:9 screen
   const screenGeom = new THREE.PlaneGeometry(0.48, 0.27);
-  // Using MeshStandardMaterial with high emissive intensity to make the screen glow brightly
-  const screenMat = new THREE.MeshStandardMaterial({
+  // MeshBasicMaterial ignores scene lighting entirely, displaying the video at full vivid brightness
+  // like a real self-illuminated LCD/OLED display
+  const screenMat = new THREE.MeshBasicMaterial({
     map: texture,
-    emissiveMap: texture,
-    emissive: new THREE.Color(0xffffff),
-    emissiveIntensity: 1.6, // Bright display glow
-    roughness: 0.1,
-    metalness: 0.1,
-    side: THREE.DoubleSide
+    side: THREE.DoubleSide,
+    toneMapped: false  // Bypass ACES tone mapping so colors stay vivid and not washed out
   });
   const screenMesh = new THREE.Mesh(screenGeom, screenMat);
   screenMesh.name = 'monitorScreen';
