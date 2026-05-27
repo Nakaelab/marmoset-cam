@@ -948,6 +948,9 @@ async function startWebcam() {
       const screenMesh = virtualMonitorGroup.getObjectByName('monitorScreen');
       if (screenMesh) {
         screenMesh.material.map = webcamTexture;
+        if (screenMesh.material.emissiveMap !== undefined) {
+          screenMesh.material.emissiveMap = webcamTexture;
+        }
         screenMesh.material.needsUpdate = true;
       }
     }
@@ -984,18 +987,24 @@ function create3DMonitor(texture) {
   const group = new THREE.Group();
   group.name = 'virtualMonitorGroup';
 
-  // 1. Screen (Display area)
-  const screenGeom = new THREE.PlaneGeometry(0.32, 0.18);
-  const screenMat = new THREE.MeshBasicMaterial({
+  // 1. Screen (Display area) - Increased size to 0.48m x 0.27m
+  const screenGeom = new THREE.PlaneGeometry(0.48, 0.27);
+  // Using MeshStandardMaterial with high emissive intensity to make the screen glow brightly
+  const screenMat = new THREE.MeshStandardMaterial({
     map: texture,
+    emissiveMap: texture,
+    emissive: new THREE.Color(0xffffff),
+    emissiveIntensity: 1.6, // Bright display glow
+    roughness: 0.1,
+    metalness: 0.1,
     side: THREE.DoubleSide
   });
   const screenMesh = new THREE.Mesh(screenGeom, screenMat);
   screenMesh.name = 'monitorScreen';
   group.add(screenMesh);
 
-  // 2. Bezel/Frame (Black plastic backing)
-  const bezelGeom = new THREE.BoxGeometry(0.34, 0.20, 0.012);
+  // 2. Bezel/Frame (Sleek dark bezel matching the screen scale)
+  const bezelGeom = new THREE.BoxGeometry(0.50, 0.29, 0.012);
   const bezelMat = new THREE.MeshStandardMaterial({
     color: 0x0f172a, // Dark slate gray
     roughness: 0.2,
@@ -1007,15 +1016,15 @@ function create3DMonitor(texture) {
   bezelMesh.position.z = -0.008;
   group.add(bezelMesh);
 
-  // Position the monitor floating directly in front of the marmoset cage
+  // Position the monitor floating directly in front of the marmoset cage at eye-level
   if (controls && controls.target) {
     group.position.set(
       controls.target.x,
       controls.target.y,
-      controls.target.z + 0.55 // Directly in front of the cage at eye-level
+      controls.target.z + 0.58 // Directly in front of the cage
     );
   } else {
-    group.position.set(0, 1.15, 0.55);
+    group.position.set(0, 1.15, 0.58);
   }
 
   // Face directly forward towards the camera
