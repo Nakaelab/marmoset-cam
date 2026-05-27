@@ -933,9 +933,17 @@ async function startWebcam() {
       document.body.appendChild(webcamVideoElement);
     }
 
-    webcamStream = await navigator.mediaDevices.getUserMedia({
-      video: { width: { ideal: 1920 }, height: { ideal: 1080 } }
-    });
+    try {
+      webcamStream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1920 }, height: { ideal: 1080 } }
+      });
+    } catch (e) {
+      console.warn("High-resolution camera access failed, falling back to standard video constraints:", e);
+      // Fallback: try requesting any video source without strict resolution settings
+      webcamStream = await navigator.mediaDevices.getUserMedia({
+        video: true
+      });
+    }
     webcamVideoElement.srcObject = webcamStream;
     await webcamVideoElement.play();
 
