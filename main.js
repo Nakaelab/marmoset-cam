@@ -1024,8 +1024,9 @@ function create3DMonitor(texture) {
     group.position.set(0, 1.15, 0.58);
   }
 
-  // Face directly forward towards the camera
-  group.rotation.y = 0;
+  // Rotate 180 degrees (Math.PI) so the screen faces the marmoset/cage directly,
+  // creating a face-to-face setup.
+  group.rotation.y = Math.PI;
 
   return group;
 }
