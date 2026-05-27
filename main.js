@@ -9,6 +9,12 @@ let model, mixer, activeAction;
 let skeletonHelper, eyeHelper;
 let eyeL = null, eyeR = null, headBone = null;
 
+// Web camera state variables
+let webcamStream = null;
+let webcamVideoElement = null;
+let webcamTexture = null;
+let virtualMonitorGroup = null;
+
 // Camera mode: 'orbit' or 'pov'
 let cameraMode = 'orbit';
 
@@ -602,6 +608,14 @@ function setupUIEventListeners() {
     povSettings.lighting = e.target.value;
     setLightingPreset(e.target.value);
   });
+
+  // Web Camera toggle button
+  const btnWebcam = document.getElementById('btn-webcam');
+  if (btnWebcam) {
+    btnWebcam.addEventListener('click', () => {
+      toggleWebcam();
+    });
+  }
 }
 
 // Slider helper
@@ -876,6 +890,163 @@ function trackMarmosetPOV() {
   
   // Position the camera
   camera.position.copy(worldPos).add(localOffset);
+}
+
+// --- Web Camera Functions ---
+
+function toggleWebcam() {
+  const btn = document.getElementById('btn-webcam');
+  if (webcamStream) {
+    stopWebcam();
+    if (btn) {
+      btn.innerHTML = `
+        <svg class="icon" viewBox="0 0 24 24" style="width: 16px; height: 16px; fill: currentColor;">
+          <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4zM14 16H5V8h9v8z"/>
+        </svg>
+        <span>Start Web Camera</span>
+      `;
+      btn.classList.remove('active');
+    }
+  } else {
+    startWebcam().then(success => {
+      if (success && btn) {
+        btn.innerHTML = `
+          <svg class="icon" viewBox="0 0 24 24" style="width: 16px; height: 16px; fill: currentColor;">
+            <path d="M18 11.03V7c0-.55-.45-1-1-1H5c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-4.03l5 4.95V6.08l-5 4.95zM16 16H6V8h10v8z"/>
+          </svg>
+          <span>Stop Web Camera</span>
+        `;
+        btn.classList.add('active');
+      }
+    });
+  }
+}
+
+async function startWebcam() {
+  try {
+    if (!webcamVideoElement) {
+      webcamVideoElement = document.createElement('video');
+      webcamVideoElement.autoplay = true;
+      webcamVideoElement.playsInline = true;
+      webcamVideoElement.muted = true;
+      webcamVideoElement.style.display = 'none';
+      document.body.appendChild(webcamVideoElement);
+    }
+
+    webcamStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 640, height: 360 }
+    });
+    webcamVideoElement.srcObject = webcamStream;
+    await webcamVideoElement.play();
+
+    webcamTexture = new THREE.VideoTexture(webcamVideoElement);
+    webcamTexture.colorSpace = THREE.SRGBColorSpace;
+
+    if (!virtualMonitorGroup) {
+      virtualMonitorGroup = create3DMonitor(webcamTexture);
+    } else {
+      const screenMesh = virtualMonitorGroup.getObjectByName('monitorScreen');
+      if (screenMesh) {
+        screenMesh.material.map = webcamTexture;
+        screenMesh.material.needsUpdate = true;
+      }
+    }
+
+    scene.add(virtualMonitorGroup);
+    console.log('Webcam started and 3D monitor added to scene.');
+    return true;
+  } catch (error) {
+    console.error('Error starting webcam:', error);
+    alert('Web camera access failed: ' + error.message);
+    return false;
+  }
+}
+
+function stopWebcam() {
+  if (webcamStream) {
+    webcamStream.getTracks().forEach(track => track.stop());
+    webcamStream = null;
+  }
+  if (webcamVideoElement) {
+    webcamVideoElement.srcObject = null;
+  }
+  if (virtualMonitorGroup) {
+    scene.remove(virtualMonitorGroup);
+  }
+  if (webcamTexture) {
+    webcamTexture.dispose();
+    webcamTexture = null;
+  }
+  console.log('Webcam stopped and 3D monitor removed.');
+}
+
+function create3DMonitor(texture) {
+  const group = new THREE.Group();
+  group.name = 'virtualMonitorGroup';
+
+  // 1. Screen (Display area)
+  const screenGeom = new THREE.PlaneGeometry(0.32, 0.18);
+  const screenMat = new THREE.MeshBasicMaterial({
+    map: texture,
+    side: THREE.DoubleSide
+  });
+  const screenMesh = new THREE.Mesh(screenGeom, screenMat);
+  screenMesh.name = 'monitorScreen';
+  group.add(screenMesh);
+
+  // 2. Bezel/Frame (Black plastic backing)
+  const bezelGeom = new THREE.BoxGeometry(0.34, 0.20, 0.015);
+  const bezelMat = new THREE.MeshStandardMaterial({
+    color: 0x111827,
+    roughness: 0.6,
+    metalness: 0.1
+  });
+  const bezelMesh = new THREE.Mesh(bezelGeom, bezelMat);
+  bezelMesh.position.z = -0.01;
+  group.add(bezelMesh);
+
+  // 3. Support Stand (Metallic pole & base)
+  const standGroup = new THREE.Group();
+  
+  const poleGeom = new THREE.CylinderGeometry(0.008, 0.008, 0.35);
+  const metalMat = new THREE.MeshStandardMaterial({
+    color: 0x4b5563,
+    roughness: 0.3,
+    metalness: 0.8
+  });
+  const pole = new THREE.Mesh(poleGeom, metalMat);
+  pole.position.y = -0.18;
+  pole.position.z = -0.01;
+  standGroup.add(pole);
+
+  const baseGeom = new THREE.CylinderGeometry(0.05, 0.05, 0.01, 16);
+  const base = new THREE.Mesh(baseGeom, metalMat);
+  base.position.y = -0.35;
+  base.position.z = -0.01;
+  standGroup.add(base);
+
+  group.add(standGroup);
+
+  // Position the monitor relative to the loaded cage model bounds
+  if (model) {
+    const box = new THREE.Box3().setFromObject(model);
+    const center = box.getCenter(new THREE.Vector3());
+
+    // Place it slightly in front and to the left of the cage
+    group.position.set(
+      center.x - 0.45,                 // Left side of cage
+      box.min.y + 0.35,                // 35cm above the floor
+      center.z + 0.5                  // Slightly forward
+    );
+
+    // Rotate it 35 degrees towards the center/viewer
+    group.rotation.y = Math.PI / 5;
+  } else {
+    group.position.set(-0.4, 0.1, 0.5);
+    group.rotation.y = Math.PI / 5;
+  }
+
+  return group;
 }
 
 // Initialize!
