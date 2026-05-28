@@ -73,16 +73,29 @@ function init() {
   scene.fog = null;
 
   // Main Camera
-  camera = new THREE.PerspectiveCamera(defaults.fov, window.innerWidth / window.innerHeight, 0.002, 100);
-  camera.position.set(0.5, 0.5, 1.2);
+  // Since cameraMode starts as 'orbit', set initial FOV to 45.
+  camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.002, 100);
+  // Match reference site camera-orbit="270deg 75deg 3.5m" and camera-target="0m 0.85m 0.11m"
+  // 270deg theta = looking from +X side, 75deg phi = slightly above
+  // radius 3.5m -> in model space (cm scale) this is ~3.5 units
+  const initTheta = THREE.MathUtils.degToRad(270);
+  const initPhi = THREE.MathUtils.degToRad(75);
+  const initRadius = 3.5;
+  camera.position.set(
+    initRadius * Math.sin(initPhi) * Math.sin(initTheta) + 0,   // X: target.x + offset
+    initRadius * Math.cos(initPhi) + 0.85,                       // Y: target.y + vertical
+    initRadius * Math.sin(initPhi) * Math.cos(initTheta) + 0.11  // Z: target.z + offset
+  );
 
   // Controls (for Orbit View)
   controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
   controls.maxPolarAngle = Math.PI / 2 + 0.1; // Don't go too far below ground
-  controls.minDistance = 0.1;
-  controls.maxDistance = 20;
+  controls.minDistance = 1.0;
+  controls.maxDistance = 8.0;
+  // Set the orbit target to match the reference camera-target="0m 0.85m 0.11m"
+  controls.target.set(0, 0.85, 0.11);
 
   // Setup basic grid (hidden by default to match reference environment)
   gridHelper = new THREE.GridHelper(10, 50, 0x475569, 0x1e293b);
@@ -349,23 +362,15 @@ function loadModel() {
               mat.name === 'PaletteMaterial006' ||
               mat.name === 'PaletteMaterial007'
             ) {
-              // Cage pillars, frames, grids/wires, and light bar (opaque, metallic silver/grey)
+              // Cage pillars, frames, grids/wires, and light bar
+              // Keep GLTF original material values (specular, IOR, emissive)
+              // to match model-viewer rendering on the reference site
               mat.transparent = false;
               mat.opacity = 1.0;
               mat.depthWrite = true;
               mat.side = THREE.DoubleSide;
-              
-              // Enable original metallic reflection
-              mat.roughness = 0.2;
-              mat.metalness = 0.95;
-
-              // Add white emissive light to the LED light bar
-              if (mat.name === 'PaletteMaterial007') {
-                mat.emissive.setHex(0xffffff);
-                mat.emissiveIntensity = 2.5;
-              }
               mat.needsUpdate = true;
-              console.log(`Opaque structure metal applied to: ${mat.name}`);
+              console.log(`Structure material preserved as GLTF original: ${mat.name}`);
             }
           });
         }
@@ -390,8 +395,8 @@ function loadModel() {
       
       gridHelper.position.y = box.min.y;
       
-      // Update Orbit controls look-at target to the model's upper center (chest/head level)
-      controls.target.set(center.x, center.y + size.y * 0.15, center.z);
+      // Keep the fixed orbit target matching the reference site's camera-target
+      // controls.target is already set to (0, 0.85, 0.11) during init
       controls.update();
 
       // Set SpotLight target if minimal dark preset is active
@@ -438,6 +443,8 @@ function loadModel() {
         cameraMode = 'pov';
         controls.enabled = false;
         if (eyeHelper) eyeHelper.visible = false;
+        camera.fov = 120;
+        camera.updateProjectionMatrix();
       }
 
       console.log('Model loaded successfully!');
@@ -500,7 +507,7 @@ function setupUIEventListeners() {
     
     // Reset camera to standard orbit position
     controls.enabled = true;
-    camera.fov = defaults.fov;
+    camera.fov = 45;
     camera.updateProjectionMatrix();
     
     if (eyeHelper) {
@@ -514,10 +521,12 @@ function setupUIEventListeners() {
     btnOrbit.classList.remove('active');
     povSettingsSec.classList.remove('disabled-opacity');
     currentModeBadge.innerText = 'POV Mode';
-    helpText.innerText = '💡 Marmoset first-person POV. Drag sliders to adjust camera offset, angles, and FOV.';
+    helpText.innerText = '💡 Marmoset first-person POV. Drag sliders to adjust camera offset and angles.';
     
     // Disable Orbit Controls in POV mode
     controls.enabled = false;
+    camera.fov = 120;
+    camera.updateProjectionMatrix();
     
     if (eyeHelper) {
       eyeHelper.visible = false;
@@ -670,7 +679,7 @@ function resetCalibration() {
   setLightingPreset(defaults.lighting);
 
   if (mixer) mixer.timeScale = defaults.speed;
-  camera.fov = defaults.fov;
+  camera.fov = cameraMode === 'pov' ? 120 : 45;
   camera.updateProjectionMatrix();
 }
 
@@ -956,15 +965,16 @@ async function startWebcam() {
     if (!virtualMonitorGroup) {
       virtualMonitorGroup = create3DMonitor(webcamTexture);
     } else {
-      const screenMesh = virtualMonitorGroup.getObjectByName('monitorScreen');
-      if (screenMesh) {
-        screenMesh.material.map = webcamTexture;
-        screenMesh.material.needsUpdate = true;
-      }
+      virtualMonitorGroup.traverse((child) => {
+        if (child.name === 'monitorScreen') {
+          child.material.map = webcamTexture;
+          child.material.needsUpdate = true;
+        }
+      });
     }
 
     scene.add(virtualMonitorGroup);
-    console.log('Webcam started and 3D monitor added to scene.');
+    console.log('Webcam started and 3D monitors added to scene.');
     return true;
   } catch (error) {
     console.error('Error starting webcam:', error);
@@ -988,28 +998,14 @@ function stopWebcam() {
     webcamTexture.dispose();
     webcamTexture = null;
   }
-  console.log('Webcam stopped and 3D monitor removed.');
+  console.log('Webcam stopped and 3D monitors removed.');
 }
 
 function create3DMonitor(texture) {
   const group = new THREE.Group();
   group.name = 'virtualMonitorGroup';
 
-  // 1. Screen (Display area) - Large 16:9 screen
-  const screenGeom = new THREE.PlaneGeometry(0.48, 0.27);
-  // MeshBasicMaterial ignores scene lighting entirely, displaying the video at full vivid brightness
-  // like a real self-illuminated LCD/OLED display
-  const screenMat = new THREE.MeshBasicMaterial({
-    map: texture,
-    side: THREE.DoubleSide,
-    toneMapped: false  // Bypass ACES tone mapping so colors stay vivid and not washed out
-  });
-  const screenMesh = new THREE.Mesh(screenGeom, screenMat);
-  screenMesh.name = 'monitorScreen';
-  group.add(screenMesh);
-
-  // 2. Bezel/Frame (Sleek dark bezel matching the screen scale)
-  const bezelGeom = new THREE.BoxGeometry(0.50, 0.29, 0.012);
+  // Common bezel material
   const bezelMat = new THREE.MeshStandardMaterial({
     color: 0x0f172a, // Dark slate gray
     roughness: 0.2,
@@ -1017,24 +1013,37 @@ function create3DMonitor(texture) {
     transparent: true,
     opacity: 0.85
   });
+
+  // Large Screen (3x Size of the original monitor)
+  const screenGeom = new THREE.PlaneGeometry(0.48 * 3.0, 0.27 * 3.0);
+  const screenMat = new THREE.MeshBasicMaterial({
+    map: texture,
+    side: THREE.DoubleSide,
+    toneMapped: false // Keep colors bright and un-tonemapped
+  });
+  const screenMesh = new THREE.Mesh(screenGeom, screenMat);
+  screenMesh.name = 'monitorScreen';
+  group.add(screenMesh);
+
+  // Large Bezel
+  const bezelGeom = new THREE.BoxGeometry(0.50 * 3.0, 0.29 * 3.0, 0.012 * 3.0);
   const bezelMesh = new THREE.Mesh(bezelGeom, bezelMat);
-  bezelMesh.position.z = -0.008;
+  bezelMesh.position.z = -0.024; // Offset just behind the screen plane
   group.add(bezelMesh);
 
-  // Position the monitor floating directly in front of the marmoset cage at eye-level
+  // Position the monitor at the back of the cage (+X), directly in front of the back camera
   if (controls && controls.target) {
     group.position.set(
-      controls.target.x,
-      controls.target.y,
-      controls.target.z + 0.58 // Directly in front of the cage
+      controls.target.x + 0.85, // Shift further back (+X)
+      controls.target.y + 0.25, // Elevated (+Y)
+      controls.target.z
     );
   } else {
-    group.position.set(0, 1.15, 0.58);
+    group.position.set(0.85, 1.10, 0.11);
   }
 
-  // Rotate 180 degrees (Math.PI) so the screen faces the marmoset/cage directly,
-  // creating a face-to-face setup.
-  group.rotation.y = Math.PI;
+  // Rotate Y by -Math.PI / 2 so the screen faces towards the inside of the cage (-X direction)
+  group.rotation.y = -Math.PI / 2;
 
   return group;
 }

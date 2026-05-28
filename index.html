@@ -119,12 +119,13 @@
           </select>
         </div>
 
-        <div class="slider-group">
+        <!-- FOV is fixed (120 for POV, 45 for Orbit), so this control is hidden -->
+        <div class="slider-group" style="display: none;">
           <div class="slider-header">
             <span>Field of View (FOV)</span>
             <span class="value-display" id="val-fov">120°</span>
           </div>
-          <input type="range" id="slider-fov" min="30" max="120" value="120" step="1">
+          <input type="range" id="slider-fov" min="20" max="120" value="120" step="1">
         </div>
 
         <h3>Position Offset</h3>
