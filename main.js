@@ -8,6 +8,7 @@ let scene, camera, renderer, controls;
 let model, mixer, activeAction;
 let skeletonHelper, eyeHelper;
 let eyeL = null, eyeR = null, headBone = null;
+let marmosetSkinnedMeshes = [];
 
 // Web camera state variables
 let webcamStream = null;
@@ -305,8 +306,18 @@ function loadModel() {
       model = gltf.scene;
       scene.add(model);
 
+      marmosetSkinnedMeshes = [];
       // Traversal to set up shadows, find bones, and adjust materials
       model.traverse((child) => {
+        if (child.isSkinnedMesh) {
+          marmosetSkinnedMeshes.push(child);
+          child.frustumCulled = false;
+          
+          // Set render order: fur meshes must render AFTER skin so fur is always on top
+          const mats = Array.isArray(child.material) ? child.material : [child.material];
+          const isFur = mats.some(m => m && m.name === 'har_material');
+          child.renderOrder = isFur ? 1 : 0;
+        }
         if (child.isMesh) {
           child.castShadow = true;
           child.receiveShadow = true;
@@ -693,11 +704,55 @@ function onWindowResize() {
 // --- Toggle Skinned Meshes (Marmoset Body Parts) Visibility ---
 function setMarmosetVisibility(visible) {
   if (!model) return;
-  model.traverse((child) => {
-    if (child.isSkinnedMesh) {
-      child.visible = visible;
+  
+  const isPOV = (cameraMode === 'pov');
+  
+  for (let i = 0; i < marmosetSkinnedMeshes.length; i++) {
+    const child = marmosetSkinnedMeshes[i];
+    if (isPOV) {
+      if (!visible) {
+        // Hide body option is checked: hide everything
+        child.visible = false;
+      } else {
+        // Hide body option is unchecked: show body but hide eyes/mouth to prevent clipping
+        const nameLower = child.name.toLowerCase();
+        const isEyeOrMouth = nameLower.startsWith('nf_');
+        
+        if (isEyeOrMouth) {
+          child.visible = false;
+        } else {
+          child.visible = true;
+          
+          // Keep fur material (har_material) as DoubleSide so fur cards render from all angles.
+          // Only set skin material (Marmoset_Material.005) to FrontSide so the head skin
+          // is backface-culled when viewed from inside the head.
+          if (child.material) {
+            const mats = Array.isArray(child.material) ? child.material : [child.material];
+            mats.forEach((mat) => {
+              const isSkin = (mat.name === 'Marmoset_Material.005');
+              const targetSide = isSkin ? THREE.FrontSide : THREE.DoubleSide;
+              if (mat.side !== targetSide) {
+                mat.side = targetSide;
+                mat.needsUpdate = true;
+              }
+            });
+          }
+        }
+      }
+    } else {
+      // Orbit mode: show everything and restore DoubleSide
+      child.visible = true;
+      if (child.material) {
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        mats.forEach((mat) => {
+          if (mat.side !== THREE.DoubleSide) {
+            mat.side = THREE.DoubleSide;
+            mat.needsUpdate = true;
+          }
+        });
+      }
     }
-  });
+  }
 }
 
 // --- Core Render / Update Loop ---
