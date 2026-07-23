@@ -16,6 +16,25 @@ let webcamVideoElement = null;
 let webcamTexture = null;
 let virtualMonitorGroup = null;
 
+// Recorded video state variables
+let recordedVideoElement = null;
+let videoSyncOffset = 0.3; // Offset in seconds to advance video and compensate for lag
+
+// Developer key listener to tune offset in real-time
+window.addEventListener('keydown', (e) => {
+  if (e.key === '[') {
+    videoSyncOffset -= 0.05;
+    console.log(`Video Sync Offset adjusted to: ${videoSyncOffset.toFixed(2)}s`);
+  } else if (e.key === ']') {
+    videoSyncOffset += 0.05;
+    console.log(`Video Sync Offset adjusted to: ${videoSyncOffset.toFixed(2)}s`);
+  }
+});
+
+// Egocentric view state variables
+let egoCanvas = null;
+let egoCamera = null;
+
 // Camera mode: 'orbit' or 'pov'
 let cameraMode = 'orbit';
 
@@ -110,6 +129,20 @@ function init() {
 
   // Setup Environment map for reflections
   setupEnvironment();
+
+  // Egocentric View setup
+  egoCanvas = document.getElementById('ego-view-canvas');
+  if (egoCanvas) {
+    egoCamera = new THREE.PerspectiveCamera(120, 260 / 139, 0.002, 100);
+  }
+
+  // Recorded Video setup
+  recordedVideoElement = document.getElementById('webcam-feed-video');
+  if (recordedVideoElement) {
+    recordedVideoElement.src = './0723 (1).mp4';
+    recordedVideoElement.loop = true;
+    recordedVideoElement.play().catch(e => console.warn("Auto-play of recorded video failed:", e));
+  }
 
   // Load Model
   loadModel();
@@ -427,7 +460,7 @@ function loadModel() {
         activeAction = mixer.clipAction(gltf.animations[0]);
         activeAction.play();
         
-        // Set up timeline range
+        // Set up timeline range to match GLB animation duration
         const totalDuration = gltf.animations[0].duration;
         document.getElementById('time-total').innerText = totalDuration.toFixed(1) + 's';
         
@@ -437,6 +470,11 @@ function loadModel() {
             document.getElementById('slider-timeline').value = 0;
           }
         });
+      }
+
+      // Ensure the bottom video starts playing in sync
+      if (recordedVideoElement) {
+        recordedVideoElement.play().catch(e => console.warn(e));
       }
 
       // Update loading status
@@ -506,7 +544,6 @@ function setupUIEventListeners() {
   const btnPOV = document.getElementById('btn-pov');
   const povSettingsSec = document.getElementById('pov-settings');
   const currentModeBadge = document.getElementById('current-mode-badge');
-  const helpText = document.getElementById('help-text');
 
   btnOrbit.addEventListener('click', () => {
     cameraMode = 'orbit';
@@ -514,7 +551,6 @@ function setupUIEventListeners() {
     btnPOV.classList.remove('active');
     povSettingsSec.classList.add('disabled-opacity');
     currentModeBadge.innerText = 'Orbit Mode';
-    helpText.innerText = '💡 Drag with left mouse button to rotate, right button to pan, and scroll wheel to zoom.';
     
     // Reset camera to standard orbit position
     controls.enabled = true;
@@ -532,7 +568,6 @@ function setupUIEventListeners() {
     btnOrbit.classList.remove('active');
     povSettingsSec.classList.remove('disabled-opacity');
     currentModeBadge.innerText = 'POV Mode';
-    helpText.innerText = '💡 Marmoset first-person POV. Drag sliders to adjust camera offset and angles.';
     
     // Disable Orbit Controls in POV mode
     controls.enabled = false;
@@ -699,13 +734,21 @@ function onWindowResize() {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+
+  // Resize egocentric view
+  if (egoCanvas && egoCamera) {
+    const width = egoCanvas.clientWidth || 260;
+    const height = egoCanvas.clientHeight || 139;
+    egoCamera.aspect = width / height;
+    egoCamera.updateProjectionMatrix();
+  }
 }
 
 // --- Toggle Skinned Meshes (Marmoset Body Parts) Visibility ---
-function setMarmosetVisibility(visible) {
+function setMarmosetVisibility(visible, forcePOV = false) {
   if (!model) return;
   
-  const isPOV = (cameraMode === 'pov');
+  const isPOV = forcePOV || (cameraMode === 'pov');
   
   for (let i = 0; i < marmosetSkinnedMeshes.length; i++) {
     const child = marmosetSkinnedMeshes[i];
@@ -761,7 +804,7 @@ function animate() {
 
   const delta = clock.getDelta();
 
-  // 1. Update Skeletal Animation
+  // 1. Update Timeline & Skeletal Animation (GLB is master)
   if (mixer && !isUserDraggingTimeline && activeAction) {
     if (lastReceivedSyncTime !== null) {
       let targetTime = lastReceivedSyncTime;
@@ -772,41 +815,82 @@ function animate() {
       
       mixer.setTime(targetTime);
       
-      // Update timeline position slider
       const clip = activeAction.getClip();
       const duration = clip.duration;
       const displayTime = targetTime % duration;
-      
       document.getElementById('time-current').innerText = displayTime.toFixed(1) + 's';
-      
       const pct = (displayTime / duration) * 100;
       document.getElementById('slider-timeline').value = pct;
     } else if (!activeAction.paused) {
       mixer.update(delta);
       
-      // Update timeline position slider
       const clip = activeAction.getClip();
       const currentTime = activeAction.time;
       const duration = clip.duration;
-      
       document.getElementById('time-current').innerText = currentTime.toFixed(1) + 's';
-      
       const pct = (currentTime / duration) * 100;
       document.getElementById('slider-timeline').value = pct;
+    }
+  }
+
+  // Synchronize recording video with GLB animation playback state
+  if (recordedVideoElement && activeAction && recordedVideoElement.readyState >= 1) {
+    if (lastReceivedSyncTime !== null) {
+      // 1. Embedded mode: Sync video and GLB with parent sync messages
+      let targetTime = lastReceivedSyncTime;
+      if (!isParentPaused) {
+        const elapsedSinceSync = (performance.now() - lastReceivedSyncTimestamp) / 1000;
+        targetTime += elapsedSinceSync;
+      }
+
+      // Sync video currentTime to parent time without force-seeking every frame
+      const timeDiff = recordedVideoElement.currentTime - targetTime;
+      if (Math.abs(timeDiff) > 0.15 && !recordedVideoElement.seeking) {
+        recordedVideoElement.currentTime = targetTime;
+      }
+
+      // Sync video play/pause with parent state
+      if (isParentPaused && !recordedVideoElement.paused) {
+        recordedVideoElement.pause();
+      } else if (!isParentPaused && recordedVideoElement.paused) {
+        recordedVideoElement.play().catch(e => console.warn(e));
+      }
+    } else {
+      // 2. Standalone mode: Simple play/pause state synchronization
+      if (activeAction.paused && !recordedVideoElement.paused) {
+        recordedVideoElement.pause();
+      } else if (!activeAction.paused && recordedVideoElement.paused) {
+        recordedVideoElement.play().catch(e => console.warn("Video play failed:", e));
+      }
+
+      // Ensure playbackRate matches base rate
+      if (recordedVideoElement.playbackRate !== mixer.timeScale) {
+        recordedVideoElement.playbackRate = mixer.timeScale;
+      }
     }
   }
 
   // 2. Perform POV Tracking or Orbit Rendering
   scene.updateMatrixWorld(true);
 
+  // Toggle bottom views container visibility based on mode
+  const bottomContainer = document.getElementById('bottom-views-container');
+  if (bottomContainer) {
+    if (cameraMode === 'pov') {
+      bottomContainer.classList.add('hidden');
+    } else {
+      bottomContainer.classList.remove('hidden');
+    }
+  }
+
   if (cameraMode === 'pov') {
-    trackMarmosetPOV();
+    trackMarmosetPOV(camera);
     // Hide body in POV mode if checked
     const hideBody = document.getElementById('check-hide-body').checked;
-    setMarmosetVisibility(!hideBody);
+    setMarmosetVisibility(!hideBody, true);
   } else {
     // Normal third person mode: always show body
-    setMarmosetVisibility(true);
+    setMarmosetVisibility(true, false);
 
     // Track marmoset in orbit if checked
     const trackMarmoset = document.getElementById('check-track-marmoset').checked;
@@ -825,6 +909,63 @@ function animate() {
   }
 
   // 3. Render Scene
+
+  // Render egocentric view first to main canvas, copy to 2D canvas, then overwrite main canvas with main camera
+  if (cameraMode === 'orbit' && model && egoCanvas && egoCamera) {
+    const width = egoCanvas.clientWidth || 260;
+    const height = egoCanvas.clientHeight || 139;
+
+    // Sync canvas buffer size with client size
+    if (egoCanvas.width !== width || egoCanvas.height !== height) {
+      egoCanvas.width = width;
+      egoCanvas.height = height;
+    }
+
+    // 1. Position ego camera
+    trackMarmosetPOV(egoCamera);
+
+    // 2. Hide body and helper for egocentric render
+    const hideBody = document.getElementById('check-hide-body').checked;
+    setMarmosetVisibility(!hideBody, true);
+    if (eyeHelper) eyeHelper.visible = false;
+
+    // 3. Render egocentric view into a small temporary viewport on main canvas
+    const dpr = window.devicePixelRatio || 1;
+    const renderWidth = width * dpr;
+    const renderHeight = height * dpr;
+
+    renderer.setViewport(0, 0, renderWidth, renderHeight);
+    renderer.setScissor(0, 0, renderWidth, renderHeight);
+    renderer.setScissorTest(true);
+
+    renderer.render(scene, egoCamera);
+
+    // 4. Copy the rendered WebGL buffer into the 2D canvas
+    const egoCtx = egoCanvas.getContext('2d');
+    if (egoCtx) {
+      egoCtx.drawImage(
+        renderer.domElement,
+        0,
+        renderer.domElement.height - renderHeight,
+        renderWidth,
+        renderHeight,
+        0,
+        0,
+        width,
+        height
+      );
+    }
+
+    // 5. Restore renderer settings and visibility states
+    renderer.setViewport(0, 0, window.innerWidth, window.innerHeight);
+    renderer.setScissor(0, 0, window.innerWidth, window.innerHeight);
+    renderer.setScissorTest(false);
+
+    setMarmosetVisibility(true, false);
+    if (eyeHelper) eyeHelper.visible = document.getElementById('check-eye-helper').checked;
+  }
+
+  // Render the main fullscreen scene
   renderer.render(scene, camera);
 }
 
@@ -886,7 +1027,8 @@ function updateEyeHelperTransform() {
 }
 
 // --- Dynamic Bone Tracking & Camera Attachment (POV Mode) ---
-function trackMarmosetPOV() {
+// --- Dynamic Bone Tracking & Camera Attachment (POV Mode) ---
+function trackMarmosetPOV(targetCamera) {
   const worldPos = new THREE.Vector3();
   const worldQuat = new THREE.Quaternion();
 
@@ -939,7 +1081,7 @@ function trackMarmosetPOV() {
   );
 
   const gazeQuat = worldQuat.clone().multiply(alignmentQuat).multiply(calibrationQuat);
-  camera.quaternion.copy(gazeQuat);
+  targetCamera.quaternion.copy(gazeQuat);
 
   // 3. Apply Position Offsets relative to the camera's view orientation:
   // - X offset is Right/Left
@@ -950,10 +1092,10 @@ function trackMarmosetPOV() {
     povSettings.offsetY,
     -povSettings.offsetZ
   );
-  localOffset.applyQuaternion(camera.quaternion);
+  localOffset.applyQuaternion(targetCamera.quaternion);
   
   // Position the camera
-  camera.position.copy(worldPos).add(localOffset);
+  targetCamera.position.copy(worldPos).add(localOffset);
 }
 
 // --- Web Camera Functions ---
@@ -1003,11 +1145,11 @@ async function startWebcam() {
       });
     } catch (e) {
       console.warn("High-resolution camera access failed, falling back to standard video constraints:", e);
-      // Fallback: try requesting any video source without strict resolution settings
       webcamStream = await navigator.mediaDevices.getUserMedia({
         video: true
       });
     }
+    
     webcamVideoElement.srcObject = webcamStream;
     await webcamVideoElement.play();
 
