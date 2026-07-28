@@ -1380,18 +1380,19 @@ function create3DMonitor(texture) {
   const screenGeom = new THREE.PlaneGeometry(0.48 * scale, 0.27 * scale);
   const screenMat = new THREE.MeshBasicMaterial({
     map: texture,
-    side: THREE.DoubleSide,
-    toneMapped: false // Keep colors bright and un-tonemapped
+    side: THREE.FrontSide,
+    toneMapped: false, // Keep colors bright and un-tonemapped
+    transparent: false
   });
   const screenMesh = new THREE.Mesh(screenGeom, screenMat);
   screenMesh.name = 'monitorScreen';
-  screenMesh.position.z = 0.005; // Slightly in front of group origin to prevent Z-fighting
+  screenMesh.position.z = 0.02; // Position clearly in front of bezel box to avoid any occlusion/shadows
   group.add(screenMesh);
 
   // Large Wall-to-Wall Bezel
   const bezelGeom = new THREE.BoxGeometry(0.50 * scale, 0.29 * scale, 0.012 * scale);
   const bezelMesh = new THREE.Mesh(bezelGeom, bezelMat);
-  bezelMesh.position.z = -0.024; // Offset just behind the screen plane
+  bezelMesh.position.z = -0.05; // Position safely behind screen plane
   group.add(bezelMesh);
 
   // Position the monitor at the back of the cage (+X), perfectly centered vertically
