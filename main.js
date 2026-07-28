@@ -1301,6 +1301,27 @@ async function startWebcam() {
     webcamTexture.magFilter = THREE.LinearFilter;
     webcamTexture.generateMipmaps = false;
 
+    // Helper to dynamically cover-fit the camera aspect ratio to the 16:9 monitor plane
+    const fitAspect = () => {
+      if (webcamVideoElement.videoWidth && webcamVideoElement.videoHeight && webcamTexture) {
+        const vAspect = webcamVideoElement.videoWidth / webcamVideoElement.videoHeight;
+        const mAspect = 16 / 9;
+        webcamTexture.center.set(0.5, 0.5);
+        if (vAspect > mAspect) {
+          webcamTexture.repeat.set(mAspect / vAspect, 1);
+          webcamTexture.offset.set((1 - mAspect / vAspect) / 2, 0);
+        } else {
+          webcamTexture.repeat.set(1, vAspect / mAspect);
+          webcamTexture.offset.set(0, (1 - vAspect / mAspect) / 2);
+        }
+        webcamTexture.needsUpdate = true;
+      }
+    };
+
+    webcamVideoElement.addEventListener('loadeddata', fitAspect);
+    webcamVideoElement.addEventListener('playing', fitAspect);
+    fitAspect(); // Initial fit attempt
+
     if (!virtualMonitorGroup) {
       virtualMonitorGroup = create3DMonitor(webcamTexture);
     } else {
