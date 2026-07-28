@@ -172,29 +172,6 @@ function init() {
   recordedVideoElement = document.getElementById('webcam-feed-video');
   if (recordedVideoElement) {
     recordedVideoElement.loop = false; // Master GLB animation controls looping
-    
-    // Ensure texture updates on 3D monitor screen as soon as video starts playing
-    const onVideoReady = () => {
-      if (recordedVideoElement && !recordedVideoTexture) {
-        recordedVideoTexture = new THREE.VideoTexture(recordedVideoElement);
-        recordedVideoTexture.colorSpace = THREE.SRGBColorSpace;
-        recordedVideoTexture.minFilter = THREE.LinearFilter;
-        recordedVideoTexture.magFilter = THREE.LinearFilter;
-        recordedVideoTexture.generateMipmaps = false;
-      }
-      if (virtualMonitorGroup && recordedVideoTexture) {
-        virtualMonitorGroup.traverse((child) => {
-          if (child.name === 'monitorScreen') {
-            child.material.map = recordedVideoTexture;
-            child.material.needsUpdate = true;
-          }
-        });
-      }
-    };
-
-    recordedVideoElement.addEventListener('playing', onVideoReady);
-    recordedVideoElement.addEventListener('loadeddata', onVideoReady);
-
     fetch('./0723 (1).mp4')
       .then(res => res.blob())
       .then(blob => {
@@ -546,22 +523,9 @@ function loadModel() {
         });
       }
 
-      // Ensure the bottom video starts playing in sync & 3D wall monitor displays vivid video stream
+      // Ensure the bottom video starts playing in sync
       if (recordedVideoElement) {
         recordedVideoElement.play().catch(e => console.warn(e));
-        
-        if (!recordedVideoTexture) {
-          recordedVideoTexture = new THREE.VideoTexture(recordedVideoElement);
-          recordedVideoTexture.colorSpace = THREE.SRGBColorSpace;
-          recordedVideoTexture.minFilter = THREE.LinearFilter;
-          recordedVideoTexture.magFilter = THREE.LinearFilter;
-          recordedVideoTexture.generateMipmaps = false;
-        }
-
-        if (!virtualMonitorGroup) {
-          virtualMonitorGroup = create3DMonitor(recordedVideoTexture);
-          scene.add(virtualMonitorGroup);
-        }
       }
 
       // Update loading status
@@ -1344,7 +1308,7 @@ async function startWebcam() {
     }
 
     scene.add(virtualMonitorGroup);
-    console.log('Webcam started and 3D monitors added to scene.');
+    console.log('Webcam started and 3D monitor displayed behind marmoset cage.');
     return true;
   } catch (error) {
     console.error('Error starting webcam:', error);
@@ -1361,20 +1325,15 @@ function stopWebcam() {
   if (webcamVideoElement) {
     webcamVideoElement.srcObject = null;
   }
+  if (virtualMonitorGroup) {
+    scene.remove(virtualMonitorGroup);
+    virtualMonitorGroup = null;
+  }
   if (webcamTexture) {
     webcamTexture.dispose();
     webcamTexture = null;
   }
-  // Revert 3D monitor screen back to vivid recorded video texture
-  if (virtualMonitorGroup && recordedVideoTexture) {
-    virtualMonitorGroup.traverse((child) => {
-      if (child.name === 'monitorScreen') {
-        child.material.map = recordedVideoTexture;
-        child.material.needsUpdate = true;
-      }
-    });
-  }
-  console.log('Webcam stopped and 3D monitor reverted to recorded video texture.');
+  console.log('Webcam stopped and 3D monitor removed from scene.');
 }
 
 function create3DMonitor(texture) {
