@@ -18,6 +18,7 @@ let virtualMonitorGroup = null;
 
 // Recorded video state variables
 let recordedVideoElement = null;
+let recordedVideoTexture = null;
 let videoSyncOffset = 0.35; // Offset in seconds to compensate for browser video rendering latency
 let lastVideoSeekTime = 0; // Timestamp of the last hard seek to prevent decoder overload
 let videoBlobReady = false; // True when video is fully loaded as Blob in memory
@@ -522,9 +523,22 @@ function loadModel() {
         });
       }
 
-      // Ensure the bottom video starts playing in sync
+      // Ensure the bottom video starts playing in sync & 3D wall monitor displays vivid video stream
       if (recordedVideoElement) {
         recordedVideoElement.play().catch(e => console.warn(e));
+        
+        if (!recordedVideoTexture) {
+          recordedVideoTexture = new THREE.VideoTexture(recordedVideoElement);
+          recordedVideoTexture.colorSpace = THREE.SRGBColorSpace;
+          recordedVideoTexture.minFilter = THREE.LinearFilter;
+          recordedVideoTexture.magFilter = THREE.LinearFilter;
+          recordedVideoTexture.generateMipmaps = false;
+        }
+
+        if (!virtualMonitorGroup) {
+          virtualMonitorGroup = create3DMonitor(recordedVideoTexture);
+          scene.add(virtualMonitorGroup);
+        }
       }
 
       // Update loading status
@@ -1320,14 +1334,20 @@ function stopWebcam() {
   if (webcamVideoElement) {
     webcamVideoElement.srcObject = null;
   }
-  if (virtualMonitorGroup) {
-    scene.remove(virtualMonitorGroup);
-  }
   if (webcamTexture) {
     webcamTexture.dispose();
     webcamTexture = null;
   }
-  console.log('Webcam stopped and 3D monitors removed.');
+  // Revert 3D monitor screen back to vivid recorded video texture
+  if (virtualMonitorGroup && recordedVideoTexture) {
+    virtualMonitorGroup.traverse((child) => {
+      if (child.name === 'monitorScreen') {
+        child.material.map = recordedVideoTexture;
+        child.material.needsUpdate = true;
+      }
+    });
+  }
+  console.log('Webcam stopped and 3D monitor reverted to recorded video texture.');
 }
 
 function create3DMonitor(texture) {
