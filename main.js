@@ -18,15 +18,46 @@ let virtualMonitorGroup = null;
 
 // Recorded video state variables
 let recordedVideoElement = null;
-let videoSyncOffset = 0.3; // Offset in seconds to advance video and compensate for lag
+let videoSyncOffset = 0.18; // Offset in seconds to compensate for browser video rendering latency
+let lastVideoSeekTime = 0; // Timestamp of the last hard seek to prevent decoder overload
+let videoBlobReady = false; // True when video is fully loaded as Blob in memory
+
+// Toast notification for offset adjustment
+function showSyncOffsetToast(val) {
+  let toast = document.getElementById('sync-offset-toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'sync-offset-toast';
+    toast.style.position = 'fixed';
+    toast.style.bottom = '90px';
+    toast.style.right = '20px';
+    toast.style.background = 'rgba(16, 185, 129, 0.9)';
+    toast.style.color = '#ffffff';
+    toast.style.padding = '8px 16px';
+    toast.style.borderRadius = '20px';
+    toast.style.fontFamily = 'monospace';
+    toast.style.fontSize = '13px';
+    toast.style.fontWeight = 'bold';
+    toast.style.zIndex = '9999';
+    toast.style.transition = 'opacity 0.3s ease';
+    toast.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+    document.body.appendChild(toast);
+  }
+  toast.innerText = `Video Offset: ${val >= 0 ? '+' : ''}${val.toFixed(2)}s ([ / ] keys to adjust)`;
+  toast.style.opacity = '1';
+  clearTimeout(toast.fadeTimer);
+  toast.fadeTimer = setTimeout(() => { toast.style.opacity = '0'; }, 3000);
+}
 
 // Developer key listener to tune offset in real-time
 window.addEventListener('keydown', (e) => {
   if (e.key === '[') {
     videoSyncOffset -= 0.05;
+    showSyncOffsetToast(videoSyncOffset);
     console.log(`Video Sync Offset adjusted to: ${videoSyncOffset.toFixed(2)}s`);
   } else if (e.key === ']') {
     videoSyncOffset += 0.05;
+    showSyncOffsetToast(videoSyncOffset);
     console.log(`Video Sync Offset adjusted to: ${videoSyncOffset.toFixed(2)}s`);
   }
 });
@@ -136,12 +167,24 @@ function init() {
     egoCamera = new THREE.PerspectiveCamera(120, 260 / 139, 0.002, 100);
   }
 
-  // Recorded Video setup
+  // Recorded Video setup - Load entire video into memory as Blob for instant seeking
   recordedVideoElement = document.getElementById('webcam-feed-video');
   if (recordedVideoElement) {
-    recordedVideoElement.src = './0723 (1).mp4';
     recordedVideoElement.loop = true;
-    recordedVideoElement.play().catch(e => console.warn("Auto-play of recorded video failed:", e));
+    fetch('./0723 (1).mp4')
+      .then(res => res.blob())
+      .then(blob => {
+        const blobUrl = URL.createObjectURL(blob);
+        recordedVideoElement.src = blobUrl;
+        videoBlobReady = true;
+        recordedVideoElement.play().catch(e => console.warn("Auto-play of recorded video failed:", e));
+        console.log('Video loaded into memory as Blob (' + (blob.size / 1024 / 1024).toFixed(1) + ' MB)');
+      })
+      .catch(e => {
+        console.warn('Blob load failed, falling back to streaming:', e);
+        recordedVideoElement.src = './0723 (1).mp4';
+        recordedVideoElement.play().catch(e2 => console.warn(e2));
+      });
   }
 
   // Load Model
@@ -469,6 +512,12 @@ function loadModel() {
           if (!isUserDraggingTimeline) {
             document.getElementById('slider-timeline').value = 0;
           }
+          // Standalone mode: hard seek video to start on loop
+          if (recordedVideoElement && lastReceivedSyncTime === null && recordedVideoElement.readyState >= 1) {
+            const timeRatio = recordedVideoElement.duration / gltf.animations[0].duration;
+            recordedVideoElement.currentTime = videoSyncOffset * timeRatio;
+            lastVideoSeekTime = performance.now();
+          }
         });
       }
 
@@ -614,6 +663,15 @@ function setupUIEventListeners() {
       btnPlayPause.innerText = 'Pause';
       btnPlayPause.classList.remove('btn-secondary');
       btnPlayPause.classList.add('btn-primary');
+      // Hard seek video on resume
+      if (recordedVideoElement && recordedVideoElement.readyState >= 1 && activeAction) {
+        const clip = activeAction.getClip();
+        const timeRatio = recordedVideoElement.duration / clip.duration;
+        let glbTime = activeAction.time + videoSyncOffset;
+        glbTime = ((glbTime % clip.duration) + clip.duration) % clip.duration;
+        recordedVideoElement.currentTime = glbTime * timeRatio;
+        lastVideoSeekTime = performance.now();
+      }
     } else {
       activeAction.paused = true;
       btnPlayPause.innerText = 'Play';
@@ -637,9 +695,24 @@ function setupUIEventListeners() {
     mixer.setTime(targetTime);
     
     document.getElementById('time-current').innerText = targetTime.toFixed(1) + 's';
+
+    // Standalone mode: sync video while scrubbing (with time scaling)
+    if (recordedVideoElement && lastReceivedSyncTime === null && recordedVideoElement.readyState >= 1) {
+      const timeRatio = recordedVideoElement.duration / duration;
+      let glbTime = targetTime + videoSyncOffset;
+      glbTime = ((glbTime % duration) + duration) % duration;
+      let videoTargetTime = glbTime * timeRatio;
+      if (recordedVideoElement.duration && videoTargetTime > recordedVideoElement.duration) {
+        videoTargetTime = videoTargetTime % recordedVideoElement.duration;
+      }
+      recordedVideoElement.currentTime = videoTargetTime;
+    }
   });
 
-  const stopDragTimeline = () => { isUserDraggingTimeline = false; };
+  const stopDragTimeline = () => { 
+    isUserDraggingTimeline = false;
+    lastVideoSeekTime = performance.now(); // Give decoder 1s to stabilize after scrub
+  };
   sliderTimeline.addEventListener('mouseup', stopDragTimeline);
   sliderTimeline.addEventListener('touchend', stopDragTimeline);
 
@@ -843,10 +916,17 @@ function animate() {
         targetTime += elapsedSinceSync;
       }
 
+      // Apply video sync offset
+      let videoTargetTime = targetTime + videoSyncOffset;
+      const duration = recordedVideoElement.duration || activeAction.getClip().duration;
+      if (duration > 0) {
+        videoTargetTime = ((videoTargetTime % duration) + duration) % duration;
+      }
+
       // Sync video currentTime to parent time without force-seeking every frame
-      const timeDiff = recordedVideoElement.currentTime - targetTime;
+      const timeDiff = recordedVideoElement.currentTime - videoTargetTime;
       if (Math.abs(timeDiff) > 0.15 && !recordedVideoElement.seeking) {
-        recordedVideoElement.currentTime = targetTime;
+        recordedVideoElement.currentTime = videoTargetTime;
       }
 
       // Sync video play/pause with parent state
@@ -856,16 +936,56 @@ function animate() {
         recordedVideoElement.play().catch(e => console.warn(e));
       }
     } else {
-      // 2. Standalone mode: Simple play/pause state synchronization
+      // 2. Standalone mode: Play/pause state synchronization + Time Synchronization
       if (activeAction.paused && !recordedVideoElement.paused) {
         recordedVideoElement.pause();
       } else if (!activeAction.paused && recordedVideoElement.paused) {
         recordedVideoElement.play().catch(e => console.warn("Video play failed:", e));
       }
 
-      // Ensure playbackRate matches base rate
-      if (recordedVideoElement.playbackRate !== mixer.timeScale) {
-        recordedVideoElement.playbackRate = mixer.timeScale;
+      const clip = activeAction.getClip();
+      const glbDuration = clip.duration;
+      const videoDuration = recordedVideoElement.duration;
+      const now = performance.now();
+      const timeSinceLastSeek = now - lastVideoSeekTime;
+
+      // Continuous time synchronization (only when not dragging and durations are valid)
+      if (glbDuration > 0 && videoDuration > 0 && !isUserDraggingTimeline) {
+        // CRITICAL: Map GLB time to video time using linear scaling
+        // GLB is 20.833s (500 frames @ 24fps), Video is 20.016s (500 frames @ 25fps)
+        // Same frame number = different timestamp, so we must scale proportionally
+        const timeRatio = videoDuration / glbDuration;
+        let glbTime = activeAction.time + videoSyncOffset;
+        glbTime = ((glbTime % glbDuration) + glbDuration) % glbDuration;
+        let videoTargetTime = glbTime * timeRatio; // Scale to video timeline
+        if (videoTargetTime > videoDuration) {
+          videoTargetTime = videoTargetTime % videoDuration;
+        }
+
+        const timeDiff = recordedVideoElement.currentTime - videoTargetTime;
+
+        // Hard Sync: If drift exceeds 0.15s and enough time since last seek (500ms cooldown)
+        if (Math.abs(timeDiff) > 0.15 && timeSinceLastSeek > 500 && !recordedVideoElement.seeking) {
+          recordedVideoElement.currentTime = videoTargetTime;
+          lastVideoSeekTime = now;
+        }
+        // Proportional Soft Sync: Adjust speed proportionally to drift magnitude
+        else if (timeSinceLastSeek > 500 && Math.abs(timeDiff) > 0.02) {
+          // Scale correction: larger drift = stronger correction (capped at ±30%)
+          const correction = Math.min(Math.abs(timeDiff) * 2.0, 0.30);
+          if (timeDiff > 0) {
+            // Video is ahead: slow down
+            recordedVideoElement.playbackRate = timeRatio * (1.0 - correction);
+          } else {
+            // Video is behind: speed up
+            recordedVideoElement.playbackRate = timeRatio * (1.0 + correction);
+          }
+        } else if (timeSinceLastSeek > 500) {
+          // In sync: set nominal playback rate (scaled to match GLB speed)
+          if (Math.abs(recordedVideoElement.playbackRate - timeRatio) > 0.005) {
+            recordedVideoElement.playbackRate = timeRatio;
+          }
+        }
       }
     }
   }
