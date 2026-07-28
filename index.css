@@ -569,8 +569,8 @@ input[type="range"]::-webkit-slider-thumb:hover {
 }
 
 .view-box {
-  width: 380px;
-  height: 220px;
+  width: 460px;
+  height: 265px;
   display: flex;
   flex-direction: column;
   overflow: hidden; /* Important for rounded corners of children */

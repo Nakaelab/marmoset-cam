@@ -1343,8 +1343,9 @@ function create3DMonitor(texture) {
     opacity: 0.85
   });
 
-  // Large Screen (3x Size of the original monitor)
-  const screenGeom = new THREE.PlaneGeometry(0.48 * 3.0, 0.27 * 3.0);
+  // Wall-to-Wall Large Screen (4.8x Size of original monitor, spanning wall width)
+  const scale = 4.8;
+  const screenGeom = new THREE.PlaneGeometry(0.48 * scale, 0.27 * scale);
   const screenMat = new THREE.MeshBasicMaterial({
     map: texture,
     side: THREE.DoubleSide,
@@ -1354,8 +1355,8 @@ function create3DMonitor(texture) {
   screenMesh.name = 'monitorScreen';
   group.add(screenMesh);
 
-  // Large Bezel
-  const bezelGeom = new THREE.BoxGeometry(0.50 * 3.0, 0.29 * 3.0, 0.012 * 3.0);
+  // Large Wall-to-Wall Bezel
+  const bezelGeom = new THREE.BoxGeometry(0.50 * scale, 0.29 * scale, 0.012 * scale);
   const bezelMesh = new THREE.Mesh(bezelGeom, bezelMat);
   bezelMesh.position.z = -0.024; // Offset just behind the screen plane
   group.add(bezelMesh);
@@ -1363,12 +1364,12 @@ function create3DMonitor(texture) {
   // Position the monitor at the back of the cage (+X), directly in front of the back camera
   if (controls && controls.target) {
     group.position.set(
-      controls.target.x + 0.85, // Shift further back (+X)
-      controls.target.y + 0.25, // Elevated (+Y)
+      controls.target.x + 0.85, // Shift back (+X)
+      controls.target.y + 0.35, // Elevated (+Y)
       controls.target.z
     );
   } else {
-    group.position.set(0.85, 1.10, 0.11);
+    group.position.set(0.85, 1.20, 0.11);
   }
 
   // Rotate Y by -Math.PI / 2 so the screen faces towards the inside of the cage (-X direction)
