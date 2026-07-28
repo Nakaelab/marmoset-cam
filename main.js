@@ -18,7 +18,7 @@ let virtualMonitorGroup = null;
 
 // Recorded video state variables
 let recordedVideoElement = null;
-let videoSyncOffset = 0.25; // Offset in seconds to compensate for browser video rendering latency
+let videoSyncOffset = 0.35; // Offset in seconds to compensate for browser video rendering latency
 let lastVideoSeekTime = 0; // Timestamp of the last hard seek to prevent decoder overload
 let videoBlobReady = false; // True when video is fully loaded as Blob in memory
 
