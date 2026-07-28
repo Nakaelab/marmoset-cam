@@ -172,6 +172,29 @@ function init() {
   recordedVideoElement = document.getElementById('webcam-feed-video');
   if (recordedVideoElement) {
     recordedVideoElement.loop = false; // Master GLB animation controls looping
+    
+    // Ensure texture updates on 3D monitor screen as soon as video starts playing
+    const onVideoReady = () => {
+      if (recordedVideoElement && !recordedVideoTexture) {
+        recordedVideoTexture = new THREE.VideoTexture(recordedVideoElement);
+        recordedVideoTexture.colorSpace = THREE.SRGBColorSpace;
+        recordedVideoTexture.minFilter = THREE.LinearFilter;
+        recordedVideoTexture.magFilter = THREE.LinearFilter;
+        recordedVideoTexture.generateMipmaps = false;
+      }
+      if (virtualMonitorGroup && recordedVideoTexture) {
+        virtualMonitorGroup.traverse((child) => {
+          if (child.name === 'monitorScreen') {
+            child.material.map = recordedVideoTexture;
+            child.material.needsUpdate = true;
+          }
+        });
+      }
+    };
+
+    recordedVideoElement.addEventListener('playing', onVideoReady);
+    recordedVideoElement.addEventListener('loadeddata', onVideoReady);
+
     fetch('./0723 (1).mp4')
       .then(res => res.blob())
       .then(blob => {
@@ -923,6 +946,10 @@ function animate() {
 
   // Synchronize recording video with GLB animation playback state
   if (recordedVideoElement && activeAction && recordedVideoElement.readyState >= 1) {
+    if (recordedVideoTexture && recordedVideoElement.readyState >= 2) {
+      recordedVideoTexture.needsUpdate = true;
+    }
+
     if (lastReceivedSyncTime !== null) {
       // 1. Embedded mode: Sync video and GLB with parent sync messages
       let targetTime = lastReceivedSyncTime;
@@ -1373,6 +1400,7 @@ function create3DMonitor(texture) {
   });
   const screenMesh = new THREE.Mesh(screenGeom, screenMat);
   screenMesh.name = 'monitorScreen';
+  screenMesh.position.z = 0.005; // Slightly in front of group origin to prevent Z-fighting
   group.add(screenMesh);
 
   // Large Wall-to-Wall Bezel
