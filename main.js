@@ -908,6 +908,11 @@ function animate() {
     }
   }
 
+  // Update webcam texture every frame if active
+  if (webcamTexture && webcamVideoElement && webcamVideoElement.readyState >= 2) {
+    webcamTexture.needsUpdate = true;
+  }
+
   // Synchronize recording video with GLB animation playback state
   if (recordedVideoElement && activeAction && recordedVideoElement.readyState >= 1) {
     if (recordedVideoTexture && recordedVideoElement.readyState >= 2) {
@@ -1368,15 +1373,15 @@ function create3DMonitor(texture) {
   bezelMesh.position.z = -0.024; // Offset just behind the screen plane
   group.add(bezelMesh);
 
-  // Position the monitor at the back of the cage (+X), directly in front of the back camera
+  // Position the monitor at the back of the cage (+X), perfectly centered vertically
   if (controls && controls.target) {
     group.position.set(
       controls.target.x + 0.85, // Shift back (+X)
-      controls.target.y + 0.35, // Elevated (+Y)
+      controls.target.y + 0.05, // Centered vertically behind cage (+Y)
       controls.target.z
     );
   } else {
-    group.position.set(0.85, 1.20, 0.11);
+    group.position.set(0.85, 0.90, 0.11);
   }
 
   // Rotate Y by -Math.PI / 2 so the screen faces towards the inside of the cage (-X direction)
