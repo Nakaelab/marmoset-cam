@@ -170,7 +170,7 @@ function init() {
   // Recorded Video setup - Load entire video into memory as Blob for instant seeking
   recordedVideoElement = document.getElementById('webcam-feed-video');
   if (recordedVideoElement) {
-    recordedVideoElement.loop = true;
+    recordedVideoElement.loop = false; // Master GLB animation controls looping
     fetch('./0723 (1).mp4')
       .then(res => res.blob())
       .then(blob => {
@@ -512,11 +512,12 @@ function loadModel() {
           if (!isUserDraggingTimeline) {
             document.getElementById('slider-timeline').value = 0;
           }
-          // Standalone mode: hard seek video to start on loop
+          // Standalone mode: hard seek video to start on loop and resume playback
           if (recordedVideoElement && lastReceivedSyncTime === null && recordedVideoElement.readyState >= 1) {
             const timeRatio = recordedVideoElement.duration / gltf.animations[0].duration;
             recordedVideoElement.currentTime = videoSyncOffset * timeRatio;
             lastVideoSeekTime = performance.now();
+            recordedVideoElement.play().catch(e => console.warn("Video loop play failed:", e));
           }
         });
       }
@@ -955,19 +956,30 @@ function animate() {
         // GLB is 20.833s (500 frames @ 24fps), Video is 20.016s (500 frames @ 25fps)
         // Same frame number = different timestamp, so we must scale proportionally
         const timeRatio = videoDuration / glbDuration;
-        let glbTime = activeAction.time + videoSyncOffset;
+        const currentGlbTime = activeAction.time % glbDuration;
+        let glbTime = currentGlbTime + videoSyncOffset;
         glbTime = ((glbTime % glbDuration) + glbDuration) % glbDuration;
         let videoTargetTime = glbTime * timeRatio; // Scale to video timeline
-        if (videoTargetTime > videoDuration) {
-          videoTargetTime = videoTargetTime % videoDuration;
+
+        // Smoothly clamp target time during the ~0.8s gap when video finishes before GLB cycle ends
+        if (videoTargetTime >= videoDuration - 0.05) {
+          videoTargetTime = videoDuration - 0.05;
         }
 
         const timeDiff = recordedVideoElement.currentTime - videoTargetTime;
+
+        // Ensure video plays continuously while animation is active
+        if (!activeAction.paused && recordedVideoElement.paused && recordedVideoElement.readyState >= 3) {
+          recordedVideoElement.play().catch(e => console.warn("Video resume play failed:", e));
+        }
 
         // Hard Sync: If drift exceeds 0.15s and enough time since last seek (500ms cooldown)
         if (Math.abs(timeDiff) > 0.15 && timeSinceLastSeek > 500 && !recordedVideoElement.seeking) {
           recordedVideoElement.currentTime = videoTargetTime;
           lastVideoSeekTime = now;
+          if (!activeAction.paused && recordedVideoElement.paused) {
+            recordedVideoElement.play().catch(e => console.warn(e));
+          }
         }
         // Proportional Soft Sync: Adjust speed proportionally to drift magnitude
         else if (timeSinceLastSeek > 500 && Math.abs(timeDiff) > 0.02) {
