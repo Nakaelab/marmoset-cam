@@ -1395,15 +1395,15 @@ function create3DMonitor(texture) {
   bezelMesh.position.z = -0.05; // Position safely behind screen plane
   group.add(bezelMesh);
 
-  // Position the monitor at the back of the cage (+X), slightly elevated on the green wall
+  // Position the monitor at the back of the cage (+X), distinctly elevated higher on the green wall
   if (controls && controls.target) {
     group.position.set(
       controls.target.x + 0.85, // Shift back (+X)
-      controls.target.y + 0.25, // Elevated height on background wall (+Y)
+      controls.target.y + 0.38, // Higher height on background wall (+Y)
       controls.target.z
     );
   } else {
-    group.position.set(0.85, 1.10, 0.11);
+    group.position.set(0.85, 1.23, 0.11);
   }
 
   // Rotate Y by -Math.PI / 2 so the screen faces towards the inside of the cage (-X direction)
