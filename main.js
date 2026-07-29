@@ -1375,8 +1375,8 @@ function create3DMonitor(texture) {
     opacity: 0.85
   });
 
-  // Wall-to-Wall Large Screen (4.8x Size of original monitor, spanning wall width)
-  const scale = 4.8;
+  // Large Screen sized to fit perfectly within the green background wall bounds (3.75x scale)
+  const scale = 3.75;
   const screenGeom = new THREE.PlaneGeometry(0.48 * scale, 0.27 * scale);
   const screenMat = new THREE.MeshBasicMaterial({
     map: texture,
@@ -1389,7 +1389,7 @@ function create3DMonitor(texture) {
   screenMesh.position.z = 0.02; // Position clearly in front of bezel box to avoid any occlusion/shadows
   group.add(screenMesh);
 
-  // Large Wall-to-Wall Bezel
+  // Wall-fitted Bezel
   const bezelGeom = new THREE.BoxGeometry(0.50 * scale, 0.29 * scale, 0.012 * scale);
   const bezelMesh = new THREE.Mesh(bezelGeom, bezelMat);
   bezelMesh.position.z = -0.05; // Position safely behind screen plane
