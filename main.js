@@ -121,7 +121,7 @@ function init() {
 
   // Scene
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xa5a89c);
+  scene.background = new THREE.Color(0xbbbdb2);
   scene.fog = null;
 
   // Main Camera
@@ -259,7 +259,7 @@ function setupEnvironment() {
   const envScene = new THREE.Scene();
   
   // Ambient light in environment
-  const ambientLight = new THREE.AmbientLight(0xffffff, 1.5);
+  const ambientLight = new THREE.AmbientLight(0xffffff, 2.0);
   envScene.add(ambientLight);
 
   // Bright light from top-front-right
@@ -268,12 +268,17 @@ function setupEnvironment() {
   envScene.add(dirLight1);
 
   // Soft light from opposite side
-  const dirLight2 = new THREE.DirectionalLight(0xffffff, 2.0);
+  const dirLight2 = new THREE.DirectionalLight(0xffffff, 3.0);
   dirLight2.position.set(-2, 3, -3);
   envScene.add(dirLight2);
 
+  // Bottom fill for ground bounce
+  const dirLight3 = new THREE.DirectionalLight(0xffffff, 1.5);
+  dirLight3.position.set(0, -2, 0);
+  envScene.add(dirLight3);
+
   // Light grey sky background for high-quality ambient reflection
-  envScene.background = new THREE.Color(0xeeeeee);
+  envScene.background = new THREE.Color(0xf0f0f0);
 
   const envMap = pmremGenerator.fromScene(envScene).texture;
   scene.environment = envMap;
@@ -295,12 +300,12 @@ function setLightingPreset(preset) {
 
   switch (preset) {
     case 'studio':
-      scene.background.setHex(0xa5a89c);
-      if (scene.fog) scene.fog.color.setHex(0xa5a89c);
+      scene.background.setHex(0xbbbdb2);
+      if (scene.fog) scene.fog.color.setHex(0xbbbdb2);
       
       lights.hemi.color.setHex(0xffffff);
-      lights.hemi.groundColor.setHex(0x2d3748);
-      lights.hemi.intensity = 1.0;
+      lights.hemi.groundColor.setHex(0x8a8a8a);
+      lights.hemi.intensity = 1.2;
 
       lights.dir1.visible = true;
       lights.dir1.color.setHex(0xffffff);
@@ -308,8 +313,8 @@ function setLightingPreset(preset) {
       lights.dir1.position.set(1.5, 3.0, 1.5);
 
       lights.dir2.visible = true;
-      lights.dir2.color.setHex(0xa5b4fc);
-      lights.dir2.intensity = 0.6;
+      lights.dir2.color.setHex(0xffffff);
+      lights.dir2.intensity = 0.8;
       lights.dir2.position.set(-1.5, 1.0, -1.5);
       break;
 
@@ -392,7 +397,10 @@ function loadModel() {
           
           // Set render order: fur meshes must render AFTER skin so fur is always on top
           const mats = Array.isArray(child.material) ? child.material : [child.material];
-          const isFur = mats.some(m => m && m.name === 'har_material');
+          const isFur = mats.some(m => m && (
+            m.name === 'har_material' ||
+            m.name === 'har_material_face_neck_dark'
+          ));
           child.renderOrder = isFur ? 1 : 0;
         }
         if (child.isMesh) {
@@ -401,8 +409,36 @@ function loadModel() {
           
           // Handle material(s) — could be a single material or an array
           const mats = Array.isArray(child.material) ? child.material : [child.material];
+          const isFurMesh = mats.some(mat => mat && (
+            mat.name === 'har_material' ||
+            mat.name === 'har_material_face_neck_dark'
+          ));
+
+          // Alpha-blended hair cards otherwise cast opaque-looking shadows on
+          // one another, making the coat far darker than neutral glTF viewers.
+          if (isFurMesh) {
+            child.castShadow = false;
+            child.receiveShadow = false;
+          }
+
           mats.forEach((mat) => {
             if (!mat) return;
+
+            // Preserve the Blender-authored fur texture colors. The global ACES
+            // pass is useful for the enclosure, but makes these alpha-blended
+            // hair cards noticeably darker than in a neutral glTF viewer.
+            if (
+              mat.name === 'har_material' ||
+              mat.name === 'har_material_face_neck_dark'
+            ) {
+              mat.toneMapped = false;
+              if (mat.emissive && mat.map) {
+                mat.emissive.setHex(0xffffff);
+                mat.emissiveMap = mat.map;
+                mat.emissiveIntensity = 0.8;
+              }
+              mat.needsUpdate = true;
+            }
 
             // Align materials with the 3D Experimental Environment color and transparency exactly
             if (mat.name === 'PaletteMaterial001') {
@@ -451,14 +487,17 @@ function loadModel() {
               mat.name === 'PaletteMaterial007'
             ) {
               // Cage pillars, frames, grids/wires, and light bar
-              // Keep GLTF original material values (specular, IOR, emissive)
-              // to match model-viewer rendering on the reference site
+              // Brighten metallic parts to match model-viewer's neutral IBL rendering
               mat.transparent = false;
               mat.opacity = 1.0;
               mat.depthWrite = true;
               mat.side = THREE.DoubleSide;
+              if (mat.metalness !== undefined) {
+                mat.metalness = Math.min(mat.metalness + 0.15, 1.0);
+                mat.roughness = Math.max(mat.roughness - 0.1, 0.1);
+              }
               mat.needsUpdate = true;
-              console.log(`Structure material preserved as GLTF original: ${mat.name}`);
+              console.log(`Structure material brightened: ${mat.name}`);
             }
           });
         }
