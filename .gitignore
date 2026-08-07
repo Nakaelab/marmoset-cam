@@ -1,2 +1,5 @@
 node_modules/
 check_urls.py
+dist/
+.dev-stderr.log
+.dev-stdout.log
