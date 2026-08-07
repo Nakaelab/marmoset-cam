@@ -1,0 +1,24 @@
+
+> marmoset-cam@1.0.0 dev
+> vite --host --port 4173
+
+
+  [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m183[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m4173[22m/[39m
+  [32m➜[39m  [1mNetwork[22m: [36mhttp://192.168.68.50:[1m4173[22m/[39m
+[2m13:12:46[22m [36m[1m[vite][22m[39m [32mhmr update [39m[2m/index.css?direct[22m
+[2m13:13:14[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2m.build-check/index.html[22m
+[2m13:13:20[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2m.build-check/index.html[22m
+[2m13:16:55[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mmain.js[22m
+[2m13:17:30[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2m.build-check-color/index.html[22m
+[2m13:17:35[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2m.build-check-color/index.html[22m
+[2m13:23:06[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mmain.js[22m
+[2m13:23:22[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mmain.js[22m
+[2m13:23:49[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mmain.js[22m
+[2m13:24:04[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mmain.js[22m
+[2m13:24:25[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2m.build-check-fur/index.html[22m
+[2m13:24:30[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2m.build-check-fur/index.html[22m
+[2m14:11:31[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mmain.js[22m
+[2m14:18:03[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mmain.js[22m
+[2m14:19:13[22m [36m[1m[vite][22m[39m [32mpage reload [39m[2mmain.js[22m
